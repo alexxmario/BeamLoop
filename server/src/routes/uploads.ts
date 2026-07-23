@@ -189,6 +189,7 @@ function errText(error: unknown): string {
 // posted to directly.
 async function publish(opts: {
   userId: string;
+  socialExternalId?: string;
   caption: string;
   platforms: Platform[];
   overrides: Record<string, string>;
@@ -200,7 +201,17 @@ async function publish(opts: {
   results: Array<{ platform: string } & PlatformResult>;
   pfmPostId?: string;
 }> {
-  const { userId, caption, platforms, overrides, kind, media, placements, scheduledAt } = opts;
+  const {
+    userId,
+    socialExternalId = userId,
+    caption,
+    platforms,
+    overrides,
+    kind,
+    media,
+    placements,
+    scheduledAt,
+  } = opts;
   const results: Array<{ platform: string } & PlatformResult> = [];
   let pfmPostId: string | undefined;
 
@@ -213,7 +224,7 @@ async function publish(opts: {
 
   // --- OAuth platforms via Post for Me ---
   if (oauthPlatforms.length > 0) {
-    const accounts = await postForMe.listAccounts(userId);
+    const accounts = await postForMe.listAccounts(socialExternalId);
     const idByPlatform = new Map<string, string>();
     for (const a of accounts) {
       if (a.status === "connected") idByPlatform.set(a.platform, a.id);
@@ -310,13 +321,13 @@ async function publish(opts: {
 
 // Re-fetch async results for posts still showing "pending" and merge them in,
 // so History self-heals once the platforms finish publishing.
-async function refreshPending(userId: string): Promise<void> {
+async function refreshPending(userId: string, socialExternalId = userId): Promise<void> {
   const posts = postStore
     .listByUser(userId)
     .filter((p) => p.pfmPostId && p.results.some((r) => r.pending));
   if (posts.length === 0) return;
 
-  const accounts = await postForMe.listAccounts(userId);
+  const accounts = await postForMe.listAccounts(socialExternalId);
   const idByPlatform = new Map<string, string>();
   for (const a of accounts) {
     if (a.status === "connected") idByPlatform.set(a.platform, a.id);
@@ -544,6 +555,7 @@ export default async function uploadRoutes(app: FastifyInstance) {
 
         const { results, pfmPostId } = await publish({
           userId: req.user.id,
+          socialExternalId: req.user.socialExternalId,
           caption,
           platforms,
           overrides,
@@ -603,6 +615,7 @@ export default async function uploadRoutes(app: FastifyInstance) {
 
     const { results: retried, pfmPostId } = await publish({
       userId: req.user.id,
+      socialExternalId: req.user.socialExternalId,
       caption: buildCaption(post.title, post.description),
       platforms,
       overrides: post.overrides ?? {},
@@ -641,7 +654,7 @@ export default async function uploadRoutes(app: FastifyInstance) {
   // success/failure once the platforms finish publishing.
   app.get("/uploads/history", async (req) => {
     await publishDueManualPosts(app).catch(() => {});
-    await refreshPending(req.user.id).catch(() => {});
+    await refreshPending(req.user.id, req.user.socialExternalId).catch(() => {});
     return {
       posts: postStore
         .listByUser(req.user.id)

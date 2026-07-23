@@ -19,6 +19,7 @@ db.exec(`
     id TEXT PRIMARY KEY,
     email TEXT NOT NULL,
     passwordHash TEXT NOT NULL,
+    socialExternalId TEXT,
     createdAt TEXT NOT NULL
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email
@@ -59,6 +60,15 @@ try {
 } catch {
   // Column already exists.
 }
+try {
+  db.exec("ALTER TABLE users ADD COLUMN socialExternalId TEXT");
+} catch {
+  // Column already exists.
+}
+// Keep the publishing-provider identity stable independently of session/user
+// IDs. Existing users retain their original ID unless explicitly recovered
+// from an earlier environment.
+db.exec("UPDATE users SET socialExternalId = id WHERE socialExternalId IS NULL");
 // Recover the value from records created by the JSON-only scheduling build.
 try {
   db.exec(
@@ -69,6 +79,8 @@ try {
   // A SQLite build without JSON functions can safely skip this local migration.
 }
 db.exec(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_users_social_external_id
+    ON users (socialExternalId);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_user_idempotency
     ON posts (userId, idempotencyKey)
     WHERE idempotencyKey IS NOT NULL;
@@ -94,9 +106,9 @@ function importJson(file: string, table: "users" | "posts", insert: (row: any) =
 
 importJson("users.json", "users", (u) => {
   db.prepare(
-    `INSERT OR IGNORE INTO users (id, email, passwordHash, createdAt)
-     VALUES (?, ?, ?, ?)`
-  ).run(u.id, u.email, u.passwordHash, u.createdAt);
+    `INSERT OR IGNORE INTO users (id, email, passwordHash, socialExternalId, createdAt)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(u.id, u.email, u.passwordHash, u.socialExternalId ?? u.id, u.createdAt);
 });
 
 importJson("posts.json", "posts", (p) => {

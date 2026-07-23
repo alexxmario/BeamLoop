@@ -92,7 +92,7 @@ export default async function authRoutes(app: FastifyInstance) {
       // Best-effort: disconnect every Post for Me social account for this user.
       // Don't block account removal if a call fails — log and continue.
       try {
-        const accounts = await postForMe.listAccounts(userId);
+        const accounts = await postForMe.listAccounts(req.user.socialExternalId);
         await Promise.all(
           accounts.map((a) =>
             postForMe.disconnectAccount(a.id).catch((err) =>

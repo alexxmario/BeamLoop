@@ -37,7 +37,7 @@ export default async function connectionRoutes(app: FastifyInstance) {
   // come from Post for Me (scoped by external_id = our user id); Discord &
   // Telegram from our own credential store.
   app.get("/connections", async (req) => {
-    const accounts = await postForMe.listAccounts(req.user.id);
+    const accounts = await postForMe.listAccounts(req.user.socialExternalId);
     const byPlatform = new Map(
       accounts.filter((a) => a.status === "connected").map((a) => [a.platform, a])
     );
@@ -81,7 +81,7 @@ export default async function connectionRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: "Pick one OAuth platform to connect" });
     }
 
-    const { url } = await postForMe.createAuthUrl(req.user.id, platform);
+    const { url } = await postForMe.createAuthUrl(req.user.socialExternalId, platform);
     return { access_url: url, duration: "" };
   });
 
@@ -133,7 +133,7 @@ export default async function connectionRoutes(app: FastifyInstance) {
       return { success: true };
     }
 
-    const accounts = await postForMe.listAccounts(req.user.id);
+    const accounts = await postForMe.listAccounts(req.user.socialExternalId);
     const matching = accounts.filter((account) => account.platform === platform);
     await Promise.all(matching.map((account) => postForMe.disconnectAccount(account.id)));
     return { success: true };

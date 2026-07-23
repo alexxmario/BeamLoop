@@ -7,9 +7,12 @@ import { db } from "./db.js";
  */
 
 export interface AppUser {
-  id: string; // also used to scope this user's connected social accounts
+  id: string;
   email: string;
   passwordHash: string; // format: <saltHex>:<scryptHex>
+  // Kept separate from the login ID so an account can safely recover social
+  // connections created in an earlier BeamLoop environment.
+  socialExternalId: string;
   createdAt: string;
 }
 
@@ -17,6 +20,7 @@ interface UserRow {
   id: string;
   email: string;
   passwordHash: string;
+  socialExternalId: string | null;
   createdAt: string;
 }
 
@@ -25,6 +29,7 @@ function rowToUser(row: UserRow): AppUser {
     id: row.id,
     email: row.email,
     passwordHash: row.passwordHash,
+    socialExternalId: row.socialExternalId ?? row.id,
     createdAt: row.createdAt,
   };
 }
@@ -62,12 +67,14 @@ export const userStore = {
       id: randomUUID(),
       email,
       passwordHash: hashPassword(password),
+      socialExternalId: "",
       createdAt: new Date().toISOString(),
     };
+    user.socialExternalId = user.id;
     db.prepare(
-      `INSERT INTO users (id, email, passwordHash, createdAt)
-       VALUES (?, ?, ?, ?)`
-    ).run(user.id, user.email, user.passwordHash, user.createdAt);
+      `INSERT INTO users (id, email, passwordHash, socialExternalId, createdAt)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(user.id, user.email, user.passwordHash, user.socialExternalId, user.createdAt);
     return user;
   },
 

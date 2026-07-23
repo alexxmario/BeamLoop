@@ -50,6 +50,11 @@ import {
 // Must match the backend's CONNECT_REDIRECT_URL and the "beamloop" scheme
 // in app.json.
 const REDIRECT_URL = "beamloop://connections/callback";
+const CONNECTION_REFRESH_DELAYS_MS = [0, 500, 1_000, 2_000, 3_500, 5_000];
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
 
 export default function ConnectionsScreen() {
   const router = useRouter();
@@ -66,11 +71,28 @@ export default function ConnectionsScreen() {
   const load = useCallback(async () => {
     try {
       setError(null);
-      setConnections(await fetchConnections());
+      const next = await fetchConnections();
+      setConnections(next);
+      return next;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load connections");
+      return null;
     }
   }, []);
+
+  const refreshUntilConnected = useCallback(
+    async (platform: Platform) => {
+      for (const delay of CONNECTION_REFRESH_DELAYS_MS) {
+        if (delay) await wait(delay);
+        const next = await load();
+        if (next?.some((connection) => connection.platform === platform && connection.connected)) {
+          return true;
+        }
+      }
+      return false;
+    },
+    [load]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -97,12 +119,36 @@ export default function ConnectionsScreen() {
     setError(null);
     try {
       const { access_url } = await fetchConnectUrl([platform]);
-      await WebBrowser.openAuthSessionAsync(access_url, REDIRECT_URL);
-      // Don't depend on the result type: in Expo Go the custom-scheme redirect
-      // never comes back as `success`, so always refetch when the browser
-      // closes. If the platform is now connected, the effect above dismisses
-      // the sheet; if not, the sheet stays so the user can retry or cancel.
-      await load();
+      const result = await WebBrowser.openAuthSessionAsync(access_url, REDIRECT_URL);
+
+      // The provider redirects on both success and failure. Surface its failure
+      // instead of making a completed-looking OAuth flow silently remain
+      // "Not connected".
+      if (result.type === "success") {
+        const params = Linking.parse(result.url).queryParams ?? {};
+        const successParam = Array.isArray(params.isSuccess)
+          ? params.isSuccess[0]
+          : params.isSuccess;
+        const providerError = Array.isArray(params.error) ? params.error[0] : params.error;
+        if (String(successParam).toLowerCase() === "false") {
+          throw new Error(
+            typeof providerError === "string" && providerError.trim()
+              ? providerError
+              : `${PLATFORM_LABELS[platform]} did not authorize the connection.`
+          );
+        }
+      }
+
+      // Account creation can become visible shortly after the browser redirect.
+      // Expo Go may also report the custom-scheme return as "dismiss", so poll
+      // the source of truth instead of trusting only the browser result.
+      const connected = await refreshUntilConnected(platform);
+      if (!connected) {
+        setHandoff(null);
+        setError(
+          `${PLATFORM_LABELS[platform]} did not finish connecting. Try again, and make sure the provider's final confirmation succeeds.`
+        );
+      }
     } catch (e) {
       setHandoff(null);
       setError(e instanceof Error ? e.message : "Could not open sign-in");
