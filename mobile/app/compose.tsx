@@ -7,13 +7,19 @@ import {
   Animated,
   Easing,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform as NativePlatform,
   Pressable,
   ScrollView,
   Text,
   TextInput,
   View,
 } from "react-native";
+import DateTimePicker, {
+  DateTimePickerAndroid,
+  type DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, {
   Circle,
@@ -922,113 +928,140 @@ function ChannelGroupsSheet({
   onDelete: (group: ChannelGroup) => void;
 }) {
   const [name, setName] = useState("");
+  const insets = useSafeAreaInsets();
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
-        onPress={onClose}
-        style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.58)", justifyContent: "flex-end" }}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={NativePlatform.OS === "ios" ? "padding" : undefined}
       >
         <Pressable
-          onPress={() => {}}
-          style={{
-            maxHeight: "78%",
-            backgroundColor: palette.sheet,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            borderWidth: 1,
-            borderColor: palette.borderStrong,
-            paddingTop: spacing.lg,
-            paddingHorizontal: spacing.screenX,
-            paddingBottom: 34,
-            gap: spacing.lg,
-          }}
+          onPress={onClose}
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.58)", justifyContent: "flex-end" }}
         >
-          <View style={[s.row, { justifyContent: "space-between" }]}>
-            <View>
-              <Text style={s.sectionLabel}>Smart groups</Text>
-              <Text style={{ ...type.displayTitle, color: palette.text, marginTop: 4 }}>
-                Your fastest combinations.
-              </Text>
-            </View>
-            <Pressable onPress={onClose} hitSlop={10}>
-              <Text style={{ ...type.monoNav, color: palette.textMono }}>Done</Text>
-            </Pressable>
-          </View>
-
-          <View
+          <Pressable
+            onPress={() => {}}
             style={{
-              backgroundColor: palette.strip,
+              width: "100%",
+              maxHeight: "88%",
+              overflow: "hidden",
+              backgroundColor: palette.sheet,
+              borderTopLeftRadius: 28,
+              borderTopRightRadius: 28,
               borderWidth: 1,
-              borderColor: palette.border,
-              borderRadius: radius.card,
-              padding: spacing.rowPad,
-              gap: spacing.md,
+              borderColor: palette.borderStrong,
+              paddingTop: spacing.lg,
+              paddingHorizontal: spacing.screenX,
+              paddingBottom: Math.max(insets.bottom, spacing.lg),
+              gap: spacing.lg,
             }}
           >
-            <Text style={{ ...type.bodySm, color: palette.textSecondary }}>
-              Save the {selected.length} currently selected channel{selected.length === 1 ? "" : "s"}.
-            </Text>
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="Launch team, Communities, Client A…"
-              placeholderTextColor={palette.textLabel}
-              maxLength={28}
-              style={s.input}
-            />
-            <Pressable
-              onPress={() => {
-                onSave(name);
-                if (name.trim() && selected.length) setName("");
-              }}
-              disabled={!name.trim() || selected.length === 0}
-              style={[s.buttonPrimary, (!name.trim() || !selected.length) && s.buttonDisabled]}
-            >
-              <Text style={s.buttonPrimaryText}>Save current selection</Text>
-            </Pressable>
-          </View>
+            <View style={[s.row, { justifyContent: "space-between", alignItems: "flex-start" }]}>
+              <View style={{ flex: 1, paddingRight: spacing.md }}>
+                <Text style={s.sectionLabel}>Smart groups</Text>
+                <Text
+                  numberOfLines={2}
+                  style={{ ...type.displayTitle, color: palette.text, marginTop: 4 }}
+                >
+                  Your fastest combinations.
+                </Text>
+              </View>
+              <Pressable
+                onPress={onClose}
+                hitSlop={10}
+                style={{ minWidth: 52, alignItems: "flex-end", paddingVertical: 2 }}
+              >
+                <Text style={{ ...type.monoNav, color: palette.textMono }}>Done</Text>
+              </Pressable>
+            </View>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {groups.length === 0 ? (
-              <Text style={{ ...type.bodySm, color: palette.textSecondary, textAlign: "center" }}>
-                Your custom groups will appear here. All Live, Social, and Community are always ready.
+            <View
+              style={{
+                backgroundColor: palette.strip,
+                borderWidth: 1,
+                borderColor: palette.border,
+                borderRadius: radius.card,
+                padding: spacing.rowPad,
+                gap: spacing.md,
+              }}
+            >
+              <Text style={{ ...type.bodySm, color: palette.textSecondary }}>
+                Save the {selected.length} currently selected channel{selected.length === 1 ? "" : "s"}.
               </Text>
-            ) : (
-              <View style={{ gap: spacing.sm }}>
-                {groups.map((group) => (
-                  <View
-                    key={group.id}
-                    style={{
-                      backgroundColor: palette.strip,
-                      borderRadius: radius.card,
-                      padding: spacing.rowPad,
-                      borderWidth: 1,
-                      borderColor: palette.border,
-                      gap: spacing.sm,
-                    }}
-                  >
-                    <View style={[s.row, { justifyContent: "space-between" }]}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ ...type.itemTitleSm, color: palette.text }}>{group.name}</Text>
-                        <Text style={{ ...type.monoMeta, color: palette.textLabel, marginTop: 3 }}>
-                          {group.platforms.map((platform) => PLATFORM_LABELS[platform]).join(" · ")}
-                        </Text>
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                placeholder="Launch team, Communities, Client A…"
+                placeholderTextColor={palette.textLabel}
+                maxLength={28}
+                returnKeyType="done"
+                style={s.input}
+              />
+              <Pressable
+                onPress={() => {
+                  onSave(name);
+                  if (name.trim() && selected.length) setName("");
+                }}
+                disabled={!name.trim() || selected.length === 0}
+                style={[s.buttonPrimary, (!name.trim() || !selected.length) && s.buttonDisabled]}
+              >
+                <Text style={s.buttonPrimaryText}>Save current selection</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={{ flexShrink: 1 }}
+              contentContainerStyle={{ paddingBottom: spacing.sm }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {groups.length === 0 ? (
+                <Text style={{ ...type.bodySm, color: palette.textSecondary, textAlign: "center" }}>
+                  Your custom groups will appear here. All Live, Social, and Community are always ready.
+                </Text>
+              ) : (
+                <View style={{ gap: spacing.sm }}>
+                  {groups.map((group) => (
+                    <View
+                      key={group.id}
+                      style={{
+                        backgroundColor: palette.strip,
+                        borderRadius: radius.card,
+                        padding: spacing.rowPad,
+                        borderWidth: 1,
+                        borderColor: palette.border,
+                        gap: spacing.sm,
+                      }}
+                    >
+                      <View style={[s.row, { justifyContent: "space-between" }]}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ ...type.itemTitleSm, color: palette.text }}>{group.name}</Text>
+                          <Text style={{ ...type.monoMeta, color: palette.textLabel, marginTop: 3 }}>
+                            {group.platforms.map((platform) => PLATFORM_LABELS[platform]).join(" · ")}
+                          </Text>
+                        </View>
+                        <Pressable onPress={() => onDelete(group)} hitSlop={8}>
+                          <Text style={{ ...type.monoMeta, color: palette.danger }}>DELETE</Text>
+                        </Pressable>
                       </View>
-                      <Pressable onPress={() => onDelete(group)} hitSlop={8}>
-                        <Text style={{ ...type.monoMeta, color: palette.danger }}>DELETE</Text>
+                      <Pressable onPress={() => onApply(group)}>
+                        <Text style={{ ...type.monoMeta, color: palette.signal }}>USE GROUP ›</Text>
                       </Pressable>
                     </View>
-                    <Pressable onPress={() => onApply(group)}>
-                      <Text style={{ ...type.monoMeta, color: palette.signal }}>USE GROUP ›</Text>
-                    </Pressable>
-                  </View>
-                ))}
-              </View>
-            )}
-          </ScrollView>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -1046,93 +1079,156 @@ function IdeasSheet({
   onUse: (idea: ContentIdea) => void;
   onDelete: (idea: ContentIdea) => void;
 }) {
+  const insets = useSafeAreaInsets();
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
-        onPress={onClose}
-        style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.58)", justifyContent: "flex-end" }}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={NativePlatform.OS === "ios" ? "padding" : undefined}
       >
         <Pressable
-          onPress={() => {}}
-          style={{
-            maxHeight: "76%",
-            backgroundColor: palette.sheet,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            borderWidth: 1,
-            borderColor: palette.borderStrong,
-            paddingTop: spacing.lg,
-            paddingHorizontal: spacing.screenX,
-            paddingBottom: 34,
-          }}
+          onPress={onClose}
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.58)", justifyContent: "flex-end" }}
         >
-          <View style={[s.row, { justifyContent: "space-between", marginBottom: spacing.lg }]}>
-            <View>
-              <Text style={s.sectionLabel}>Your idea shelf</Text>
-              <Text style={{ ...type.displayTitle, color: palette.text, marginTop: 4 }}>
-                Ready when inspiration hits.
-              </Text>
-            </View>
-            <Pressable onPress={onClose} hitSlop={10}>
-              <Text style={{ ...type.monoNav, color: palette.textMono }}>Done</Text>
-            </Pressable>
-          </View>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {ideas.length === 0 ? (
-              <View
-                style={{
-                  borderWidth: 1,
-                  borderStyle: "dashed",
-                  borderColor: palette.borderDashed,
-                  borderRadius: radius.card,
-                  padding: spacing.xxl,
-                }}
-              >
-                <Text style={{ ...type.bodySm, color: palette.textSecondary, textAlign: "center" }}>
-                  Write a caption, tap Save to Ideas, and it will wait here for your next post.
+          <Pressable
+            onPress={() => {}}
+            style={{
+              width: "100%",
+              maxHeight: "88%",
+              overflow: "hidden",
+              backgroundColor: palette.sheet,
+              borderTopLeftRadius: 28,
+              borderTopRightRadius: 28,
+              borderWidth: 1,
+              borderColor: palette.borderStrong,
+              paddingTop: spacing.lg,
+              paddingHorizontal: spacing.screenX,
+              paddingBottom: Math.max(insets.bottom, spacing.lg),
+            }}
+          >
+            <View
+              style={[
+                s.row,
+                {
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  marginBottom: spacing.lg,
+                },
+              ]}
+            >
+              <View style={{ flex: 1, paddingRight: spacing.md }}>
+                <Text style={s.sectionLabel}>Your idea shelf</Text>
+                <Text
+                  numberOfLines={2}
+                  style={{ ...type.displayTitle, color: palette.text, marginTop: 4 }}
+                >
+                  Ready when inspiration hits.
                 </Text>
               </View>
-            ) : (
-              <View style={{ gap: spacing.sm }}>
-                {ideas.map((idea) => (
-                  <View
-                    key={idea.id}
-                    style={{
-                      backgroundColor: palette.strip,
-                      borderRadius: radius.card,
-                      borderWidth: 1,
-                      borderColor: palette.border,
-                      padding: spacing.rowPad,
-                      gap: spacing.md,
-                    }}
-                  >
-                    <Text numberOfLines={5} style={{ ...type.bodySm, color: palette.text }}>
-                      {idea.text}
-                    </Text>
-                    <View style={[s.row, { justifyContent: "space-between" }]}>
-                      <Pressable
-                        onPress={() => onUse(idea)}
-                        style={{
-                          backgroundColor: palette.signal,
-                          borderRadius: radius.pill,
-                          paddingHorizontal: spacing.rowPad,
-                          paddingVertical: 7,
-                        }}
-                      >
-                        <Text style={{ ...type.monoMeta, color: palette.console }}>USE THIS IDEA</Text>
-                      </Pressable>
-                      <Pressable onPress={() => onDelete(idea)} hitSlop={8}>
-                        <Text style={{ ...type.monoMeta, color: palette.danger }}>DELETE</Text>
-                      </Pressable>
+              <Pressable
+                onPress={onClose}
+                hitSlop={10}
+                style={{ minWidth: 52, alignItems: "flex-end", paddingVertical: 2 }}
+              >
+                <Text style={{ ...type.monoNav, color: palette.textMono }}>Done</Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              style={{ flexShrink: 1 }}
+              contentContainerStyle={{ paddingBottom: spacing.sm }}
+              showsVerticalScrollIndicator={false}
+            >
+              {ideas.length === 0 ? (
+                <View
+                  style={{
+                    borderWidth: 1,
+                    borderStyle: "dashed",
+                    borderColor: palette.borderDashed,
+                    borderRadius: radius.card,
+                    padding: spacing.xxl,
+                  }}
+                >
+                  <Text style={{ ...type.bodySm, color: palette.textSecondary, textAlign: "center" }}>
+                    Write a caption, tap Save to Ideas, and it will wait here for your next post.
+                  </Text>
+                </View>
+              ) : (
+                <View style={{ gap: spacing.sm }}>
+                  {ideas.map((idea) => (
+                    <View
+                      key={idea.id}
+                      style={{
+                        backgroundColor: palette.strip,
+                        borderRadius: radius.card,
+                        borderWidth: 1,
+                        borderColor: palette.border,
+                        padding: spacing.rowPad,
+                        gap: spacing.md,
+                      }}
+                    >
+                      <Text numberOfLines={5} style={{ ...type.bodySm, color: palette.text }}>
+                        {idea.text}
+                      </Text>
+                      <View style={[s.row, { justifyContent: "space-between" }]}>
+                        <Pressable
+                          onPress={() => onUse(idea)}
+                          style={{
+                            backgroundColor: palette.signal,
+                            borderRadius: radius.pill,
+                            paddingHorizontal: spacing.rowPad,
+                            paddingVertical: 7,
+                          }}
+                        >
+                          <Text style={{ ...type.monoMeta, color: palette.console }}>USE THIS IDEA</Text>
+                        </Pressable>
+                        <Pressable onPress={() => onDelete(idea)} hitSlop={8}>
+                          <Text style={{ ...type.monoMeta, color: palette.danger }}>DELETE</Text>
+                        </Pressable>
+                      </View>
                     </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          </ScrollView>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
+  );
+}
+
+function NativePickerRow({
+  label,
+  value,
+  onPress,
+}: {
+  label: string;
+  value: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        backgroundColor: palette.strip,
+        borderRadius: radius.card,
+        borderWidth: 1,
+        borderColor: palette.border,
+        padding: spacing.rowPad,
+      }}
+    >
+      <View style={[s.row, { justifyContent: "space-between" }]}>
+        <Text style={s.sectionLabel}>{label}</Text>
+        <Text style={{ ...type.itemTitleSm, color: palette.text }}>{value}</Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -1809,23 +1905,44 @@ function CustomScheduleSheet({
   onClose: () => void;
   onConfirm: () => void;
 }) {
-  const selected = new Date(value);
-  const dates = Array.from({ length: 30 }, (_, offset) => {
-    const date = new Date();
-    date.setDate(date.getDate() + offset);
-    date.setHours(0, 0, 0, 0);
-    return date;
-  });
-  const times = Array.from({ length: 36 }, (_, index) => 6 * 60 + index * 30);
-  const tooSoon = selected.getTime() < Date.now() + 5 * 60 * 1000;
+  const insets = useSafeAreaInsets();
+  const parsed = new Date(value);
+  const selected = Number.isNaN(parsed.getTime()) ? tomorrowMorning() : parsed;
+  const minimumDate = new Date(Date.now() + 5 * 60 * 1000);
+  const tooSoon = selected.getTime() < minimumDate.getTime();
 
-  const sameDay = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate();
+  const handleChange = (_event: DateTimePickerEvent, date?: Date) => {
+    if (date) onChange(date.toISOString());
+  };
+
+  const openAndroidPicker = (mode: "date" | "time") => {
+    DateTimePickerAndroid.open({
+      value: selected,
+      mode,
+      is24Hour: false,
+      minimumDate: mode === "date" ? minimumDate : undefined,
+      onChange: (event, date) => {
+        if (event.type !== "set" || !date) return;
+
+        const next = new Date(selected);
+        if (mode === "date") {
+          next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+        } else {
+          next.setHours(date.getHours(), date.getMinutes(), 0, 0);
+        }
+        onChange(next.toISOString());
+      },
+    });
+  };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
       <Pressable
         onPress={onClose}
         style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.58)", justifyContent: "flex-end" }}
@@ -1833,6 +1950,9 @@ function CustomScheduleSheet({
         <Pressable
           onPress={() => {}}
           style={{
+            width: "100%",
+            maxHeight: "88%",
+            overflow: "hidden",
             backgroundColor: palette.sheet,
             borderTopLeftRadius: 28,
             borderTopRightRadius: 28,
@@ -1840,104 +1960,79 @@ function CustomScheduleSheet({
             borderColor: palette.borderStrong,
             paddingTop: spacing.lg,
             paddingHorizontal: spacing.screenX,
-            paddingBottom: 34,
+            paddingBottom: Math.max(insets.bottom, spacing.lg),
             gap: spacing.lg,
           }}
         >
-          <View style={[s.row, { justifyContent: "space-between" }]}>
-            <View>
+          <View
+            style={[
+              s.row,
+              { justifyContent: "space-between", alignItems: "flex-start", gap: spacing.md },
+            ]}
+          >
+            <View style={{ flex: 1 }}>
               <Text style={s.sectionLabel}>Custom slot</Text>
-              <Text style={{ ...type.displayTitle, color: palette.text, marginTop: 4 }}>
+              <Text
+                numberOfLines={2}
+                style={{ ...type.displayTitle, color: palette.text, marginTop: 4 }}
+              >
                 {formatSchedule(value)}
               </Text>
             </View>
-            <Pressable onPress={onClose} hitSlop={10}>
+            <Pressable
+              onPress={onClose}
+              hitSlop={10}
+              style={{ minWidth: 52, alignItems: "flex-end", paddingVertical: 2 }}
+            >
               <Text style={{ ...type.monoNav, color: palette.textMono }}>Close</Text>
             </Pressable>
           </View>
 
-          <View style={{ gap: spacing.sm }}>
-            <Text style={s.sectionLabel}>Day</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={[s.row, { gap: spacing.sm }]}>
-                {dates.map((date) => {
-                  const active = sameDay(date, selected);
-                  return (
-                    <Pressable
-                      key={date.toISOString()}
-                      onPress={() => {
-                        date.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
-                        onChange(date.toISOString());
-                      }}
-                      style={{
-                        minWidth: 66,
-                        alignItems: "center",
-                        paddingVertical: 9,
-                        borderRadius: radius.pill,
-                        backgroundColor: active ? palette.signal : palette.strip,
-                        borderWidth: 1,
-                        borderColor: active ? palette.signal : palette.borderStrong,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          ...type.monoMeta,
-                          color: active ? palette.console : palette.textSecondary,
-                        }}
-                      >
-                        {date.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}
-                      </Text>
-                    </Pressable>
-                  );
+          {NativePlatform.OS === "ios" ? (
+            <View
+              style={{
+                borderRadius: radius.card,
+                borderWidth: 1,
+                borderColor: palette.border,
+                backgroundColor: palette.strip,
+                overflow: "hidden",
+              }}
+            >
+              <DateTimePicker
+                value={selected}
+                mode="datetime"
+                display="spinner"
+                minimumDate={minimumDate}
+                minuteInterval={1}
+                themeVariant="dark"
+                textColor={palette.text}
+                accentColor={palette.signal}
+                onChange={handleChange}
+                style={{ width: "100%", height: 216 }}
+              />
+            </View>
+          ) : (
+            <View style={{ gap: spacing.sm }}>
+              <NativePickerRow
+                label="Date"
+                value={selected.toLocaleDateString(undefined, {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
                 })}
-              </View>
-            </ScrollView>
-          </View>
-
-          <View style={{ gap: spacing.sm }}>
-            <Text style={s.sectionLabel}>Time</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={[s.row, { gap: spacing.sm }]}>
-                {times.map((minutes) => {
-                  const hour = Math.floor(minutes / 60);
-                  const minute = minutes % 60;
-                  const active = selected.getHours() === hour && selected.getMinutes() === minute;
-                  const label = new Date(2000, 0, 1, hour, minute).toLocaleTimeString(undefined, {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  });
-                  return (
-                    <Pressable
-                      key={minutes}
-                      onPress={() => {
-                        const next = new Date(selected);
-                        next.setHours(hour, minute, 0, 0);
-                        onChange(next.toISOString());
-                      }}
-                      style={{
-                        minWidth: 72,
-                        alignItems: "center",
-                        paddingVertical: 9,
-                        borderRadius: radius.pill,
-                        backgroundColor: active ? palette.signal : palette.strip,
-                        borderWidth: 1,
-                        borderColor: active ? palette.signal : palette.borderStrong,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          ...type.monoMeta,
-                          color: active ? palette.console : palette.textSecondary,
-                        }}
-                      >
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
+                onPress={() => openAndroidPicker("date")}
+              />
+              <NativePickerRow
+                label="Time"
+                value={selected.toLocaleTimeString(undefined, {
+                  hour: "numeric",
+                  minute: "2-digit",
                 })}
-              </View>
-            </ScrollView>
-          </View>
+                onPress={() => openAndroidPicker("time")}
+              />
+            </View>
+          )}
 
           {tooSoon && (
             <Text style={s.errorText}>Choose a time at least five minutes from now.</Text>
