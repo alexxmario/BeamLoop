@@ -50,4 +50,4 @@ excludes rights or liability that cannot legally be excluded.
 We may update the service or these Terms. The effective date will change when
 we do, and material changes will receive any notice or consent required by law.
 
-Questions: **support@beamloop.app**.
+Questions: **alexionescu870@gmail.com**.

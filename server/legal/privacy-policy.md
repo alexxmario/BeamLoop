@@ -8,8 +8,8 @@ at `/legal/privacy`.
 
 ## Operator and contact
 
-BeamLoop is operated under the **BeamLoop** name. Privacy and support requests
-can be sent to **support@beamloop.app**. The public site can override the
+BeamLoop is operated by **Alex Ionescu**. Privacy and support requests can be
+sent to **alexionescu870@gmail.com**. The public site can override the
 displayed legal operator and email at runtime with `PUBLIC_LEGAL_NAME` and
 `SUPPORT_EMAIL`.
 
@@ -55,7 +55,8 @@ temporarily required for security or legal obligations. Content already
 published is controlled by the destination and must be removed there.
 
 Depending on location, a user may also request access, correction, portability,
-restriction, objection, or deletion by emailing **support@beamloop.app**.
+restriction, objection, or deletion by emailing
+**alexionescu870@gmail.com**.
 
 ## Security, international processing, and children
 

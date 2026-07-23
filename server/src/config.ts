@@ -24,8 +24,8 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().optional(),
   // Public website details. Override these in Railway with the exact legal
   // operator and monitored support inbox used for the App Store listing.
-  PUBLIC_LEGAL_NAME: z.string().trim().min(2).max(120).default("BeamLoop"),
-  SUPPORT_EMAIL: z.string().trim().email().default("support@beamloop.app"),
+  PUBLIC_LEGAL_NAME: z.string().trim().min(2).max(120).default("Alex Ionescu"),
+  SUPPORT_EMAIL: z.string().trim().email().default("alexionescu870@gmail.com"),
   PUBLIC_BASE_URL: z
     .string()
     .url()
