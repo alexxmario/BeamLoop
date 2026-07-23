@@ -27,7 +27,7 @@ const pageHeaders = {
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
   "permissions-policy": "camera=(), microphone=(), geolocation=()",
-  "cache-control": "public, max-age=300",
+  "cache-control": "no-cache",
 };
 
 export default async function legalRoutes(app: FastifyInstance) {
