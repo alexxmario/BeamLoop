@@ -1,8 +1,8 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import {
   accountDeletionPage,
-  brandCardSvg,
-  faviconSvg,
   landingPage,
   privacyPage,
   robotsText,
@@ -11,6 +11,14 @@ import {
   supportPage,
   termsPage,
 } from "../lib/publicSite.js";
+
+async function readPublicAsset(packagedName: string, localName: string) {
+  try {
+    return await readFile(resolve(process.cwd(), "public", packagedName));
+  } catch {
+    return readFile(resolve(process.cwd(), "..", localName));
+  }
+}
 
 const pageHeaders = {
   "content-security-policy":
@@ -46,17 +54,25 @@ export default async function legalRoutes(app: FastifyInstance) {
     reply.redirect("/account-deletion", 308)
   );
 
-  app.get("/favicon.svg", async (_req, reply) =>
+  app.get("/assets/app-icon.png", async (_req, reply) =>
     reply
       .header("cache-control", "public, max-age=86400")
-      .type("image/svg+xml; charset=utf-8")
-      .send(faviconSvg())
+      .type("image/png")
+      .send(await readPublicAsset("app-icon.png", "beamloop-icon-1024.png"))
   );
-  app.get("/brand-card.svg", async (_req, reply) =>
+  app.get("/assets/archivo-expanded-extra-bold.ttf", async (_req, reply) =>
     reply
       .header("cache-control", "public, max-age=86400")
-      .type("image/svg+xml; charset=utf-8")
-      .send(brandCardSvg())
+      .type("font/ttf")
+      .send(
+        await readPublicAsset(
+          "archivo-expanded-extra-bold.ttf",
+          "mobile/assets/fonts/ArchivoExpanded-ExtraBold.ttf"
+        )
+      )
+  );
+  app.get("/favicon.svg", async (_req, reply) =>
+    reply.redirect("/assets/app-icon.png", 308)
   );
   app.get("/robots.txt", async (_req, reply) =>
     reply.type("text/plain; charset=utf-8").send(robotsText())

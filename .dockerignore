@@ -10,6 +10,11 @@
 **/node_modules
 **/dist
 server/data
-mobile
+mobile/*
+!mobile/assets/
+mobile/assets/*
+!mobile/assets/fonts/
+mobile/assets/fonts/*
+!mobile/assets/fonts/ArchivoExpanded-ExtraBold.ttf
 Beamloop.html
 *.log
