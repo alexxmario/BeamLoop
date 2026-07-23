@@ -1,0 +1,32 @@
+{
+  "name": "beamloop-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test:provider-contract": "node scripts/provider-contract-check.mjs",
+    "release:check": "node scripts/release-check.mjs"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.0.0",
+    "@fastify/multipart": "^10.0.0",
+    "@fastify/rate-limit": "^11.1.0",
+    "better-sqlite3": "^12.11.1",
+    "dotenv": "^16.4.5",
+    "fastify": "^5.0.0",
+    "fastify-plugin": "^5.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
