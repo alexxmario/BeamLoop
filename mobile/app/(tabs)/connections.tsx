@@ -168,9 +168,9 @@ export default function ConnectionsScreen() {
     );
   };
 
-  const openLegal = (document: "privacy" | "terms") =>
-    Linking.openURL(`${API_BASE_URL}/legal/${document}`).catch(() =>
-      setError("Couldn't open that document. Please try again.")
+  const openPublicPage = (path: "/support" | "/legal/privacy" | "/legal/terms") =>
+    Linking.openURL(`${API_BASE_URL}${path}`).catch(() =>
+      setError("Couldn't open that page. Please try again.")
     );
 
   // "Soon" platforms don't count toward the connected/total progress.
@@ -308,10 +308,13 @@ export default function ConnectionsScreen() {
               </Text>
             </Pressable>
             <View style={[s.row, { gap: spacing.lg, marginTop: spacing.xl }]}>
-              <Pressable onPress={() => openLegal("privacy")} hitSlop={8}>
+              <Pressable onPress={() => openPublicPage("/support")} hitSlop={8}>
+                <Text style={{ ...type.monoMeta, color: palette.textMono }}>SUPPORT</Text>
+              </Pressable>
+              <Pressable onPress={() => openPublicPage("/legal/privacy")} hitSlop={8}>
                 <Text style={{ ...type.monoMeta, color: palette.textMono }}>PRIVACY</Text>
               </Pressable>
-              <Pressable onPress={() => openLegal("terms")} hitSlop={8}>
+              <Pressable onPress={() => openPublicPage("/legal/terms")} hitSlop={8}>
                 <Text style={{ ...type.monoMeta, color: palette.textMono }}>TERMS</Text>
               </Pressable>
             </View>

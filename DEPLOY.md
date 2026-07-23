@@ -28,21 +28,26 @@ The backend is a Node/Fastify server in `server/`. It stores data in SQLite
    | `CONNECT_REDIRECT_URL` | `beamloop://connections/callback` |
    | `TIKTOK_PRIVACY` | leave as `SELF_ONLY` until TikTok is enabled |
    | `CORS_ORIGIN` | optional comma-separated web origins; leave unset to disable browser CORS |
+   | `PUBLIC_LEGAL_NAME` | exact person or company operating BeamLoop |
+   | `SUPPORT_EMAIL` | monitored address shown to users and App Review |
+   | `PUBLIC_BASE_URL` | `https://beamloop-production.up.railway.app` |
+   | `APP_STORE_URL` | optional; add the listing URL after release |
 
    Railway sets `PORT` automatically — the server already reads it.
 5. **Deploy**, then note the public URL Railway gives you (e.g.
    `https://beamloop-production.up.railway.app`). Hit `/health` to confirm.
-   You can attach a custom domain like `https://api.beamloop.app` later.
-   The same host exposes public policy documents at `/legal/privacy` and
-   `/legal/terms`; replace the legal entity and support-email placeholders in
-   `server/legal/` before launch.
+   You can attach a branded custom API domain later without changing the
+   Railway service.
+   The same host serves the product site (`/`), support (`/support`), deletion
+   instructions (`/account-deletion`), privacy (`/legal/privacy`), and terms
+   (`/legal/terms`).
 
 ## 2. Point the app at the deployed backend
 
-In `mobile/eas.json`, `preview` and `production` currently use
-`https://api.beamloop.app`. Do not build until that hostname resolves and
-`https://<host>/health` returns `{ "ok": true }`. Otherwise replace both
-values with the real Railway URL (or attach the custom domain first).
+In `mobile/eas.json`, `preview` and `production` use the Railway production
+hostname. Do not build until
+`https://beamloop-production.up.railway.app/health` returns `{ "ok": true }`.
+If the backend moves, update both EAS profiles and build a new binary.
 
 ## 3. Apple Developer account (required to ship)
 
@@ -74,12 +79,16 @@ your own device before the store build.
 
 ## 5. App Store listing & compliance
 
-- **Privacy policy URL** (required). Use
-  `https://<your-api-host>/legal/privacy` and fill the placeholders in
-  `server/legal/privacy-policy.md` first.
-- **Terms of service** (recommended). Use
-  `https://<your-api-host>/legal/terms` after filling
-  `server/legal/terms-of-service.md`.
+- **Privacy policy URL** (required):
+  `https://beamloop-production.up.railway.app/legal/privacy`
+- **Support URL** (required):
+  `https://beamloop-production.up.railway.app/support`
+- **Account deletion URL**:
+  `https://beamloop-production.up.railway.app/account-deletion`
+- **Terms of service**:
+  `https://beamloop-production.up.railway.app/legal/terms`
+- Confirm `PUBLIC_LEGAL_NAME` and `SUPPORT_EMAIL` in Railway show the exact
+  identity and working inbox you want customers and Apple to use.
 - **App Privacy questionnaire** in App Store Connect: declare email + connected
   account credentials as collected, used for app functionality, not for
   tracking.

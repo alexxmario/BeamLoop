@@ -22,6 +22,15 @@ const envSchema = z.object({
   // allow a per-request override).
   CONNECT_REDIRECT_URL: z.string().default("beamloop://connections/callback"),
   CORS_ORIGIN: z.string().optional(),
+  // Public website details. Override these in Railway with the exact legal
+  // operator and monitored support inbox used for the App Store listing.
+  PUBLIC_LEGAL_NAME: z.string().trim().min(2).max(120).default("BeamLoop"),
+  SUPPORT_EMAIL: z.string().trim().email().default("support@beamloop.app"),
+  PUBLIC_BASE_URL: z
+    .string()
+    .url()
+    .default("https://beamloop-production.up.railway.app"),
+  APP_STORE_URL: z.string().url().optional(),
   // Retry media is useful only briefly. Keep it long enough for a user to
   // recover a failed delivery, then remove it automatically.
   MEDIA_RETENTION_HOURS: z.coerce.number().int().min(1).max(720).default(168),

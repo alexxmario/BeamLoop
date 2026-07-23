@@ -20,13 +20,13 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.beamloop.app"
+        "EXPO_PUBLIC_API_URL": "https://beamloop-production.up.railway.app"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.beamloop.app"
+        "EXPO_PUBLIC_API_URL": "https://beamloop-production.up.railway.app"
       }
     }
   },

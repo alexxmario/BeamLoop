@@ -1,47 +1,71 @@
 # BeamLoop Privacy Policy
 
-_Last updated: 22 July 2026_
+_Effective: 24 July 2026_
 
-BeamLoop ("BeamLoop", "we", "us") lets you publish content to several social
-platforms at once.
+BeamLoop lets people prepare, schedule, and publish content to connected social
+and community platforms. The public, formatted version of this policy is served
+at `/legal/privacy`.
 
-## Who we are
+## Operator and contact
 
-BeamLoop is operated by **[LEGAL ENTITY / YOUR NAME]**, contactable at
-**[SUPPORT EMAIL]**.
+BeamLoop is operated under the **BeamLoop** name. Privacy and support requests
+can be sent to **support@beamloop.app**. The public site can override the
+displayed legal operator and email at runtime with `PUBLIC_LEGAL_NAME` and
+`SUPPORT_EMAIL`.
 
-## What we collect
+## Data we collect
 
-- **Account details:** email address and password. Passwords are salted and
-  hashed before storage.
-- **Connected accounts:** account tokens held by our publishing provider. For
-  Discord and Telegram, we store the webhook URL or bot credentials you supply,
-  encrypted at rest.
-- **Content:** videos, photos, captions, titles, and scheduled delivery times.
-  Scheduled media is kept until delivery; retry media is then retained for up
-  to seven days before deletion.
-- **Operational logs:** request and error information used for security and
-  reliability.
+- Account email, internal account identifier, and a salted password hash.
+- Connected-account identifiers and authorization needed to publish.
+- Photos, videos, captions, titles, destination choices, placements, and
+  scheduled delivery times supplied by the user.
+- Request timestamps, delivery status, security information, and error logs
+  needed to operate and protect the service.
 
-We do not collect location, contacts, advertising identifiers, or analytics.
+OAuth connections are managed through our publishing provider. Discord webhook
+and Telegram bot details entered by a user are encrypted at rest. BeamLoop does
+not intentionally collect contacts, precise location, advertising identifiers,
+health information, payment-card details, or cross-app tracking data.
 
-## How we use and share data
+## Use and sharing
 
-We use account data to authenticate you and use your selected content and
-connections solely to publish at your request. Post for Me receives content,
-connection tokens, and an internal account identifier to deliver posts. The
-social platforms you select receive the content you publish. We also use
-hosting providers to operate the service. We do not sell data or use it for
-advertising.
+We use data only to operate accounts, connect destinations, validate and
+deliver posts, show delivery history, honor cancellation and deletion requests,
+prevent abuse, and diagnose reliability problems.
 
-## Retention and choices
+Post for Me receives the content and authorization needed to deliver posts.
+Railway provides hosting. Selected social and community destinations receive
+the content the user asks BeamLoop to publish. We may disclose limited
+information when required by law or necessary to protect legal rights and
+service security.
 
-Account data is kept until you delete your account. Scheduled media is retained
-until delivery and then deleted within seven days. You can disconnect individual platforms or permanently
-delete your account from the Connections tab. Published content remains subject
-to the relevant social platform's own retention controls.
+We do not sell personal data or share it for targeted advertising.
 
-## Children and contact
+## Retention and control
 
-BeamLoop is not directed to children under 13. Questions or data requests:
-**[SUPPORT EMAIL]**.
+Account and connection data is kept while the account is active. Scheduled
+media is retained until delivery. Retry media is removed within seven days
+after delivery or failure. Operational logs are retained only for a limited
+security and troubleshooting period.
+
+Users can disconnect a destination or permanently delete their BeamLoop
+account inside the app. Account deletion removes BeamLoop-held account data,
+connection records, schedules, history, and retained media, except information
+temporarily required for security or legal obligations. Content already
+published is controlled by the destination and must be removed there.
+
+Depending on location, a user may also request access, correction, portability,
+restriction, objection, or deletion by emailing **support@beamloop.app**.
+
+## Security, international processing, and children
+
+BeamLoop uses access controls, transport encryption, password hashing,
+encrypted storage for manually supplied credentials, rate limits, and limited
+media retention. Providers and destinations may process data in other
+countries under their own safeguards and applicable law.
+
+BeamLoop is not directed to children under 13 or anyone below the minimum age
+required to use their connected platforms.
+
+We may update this policy as BeamLoop changes. Material changes will be
+reflected in the effective date and accompanied by any notice required by law.

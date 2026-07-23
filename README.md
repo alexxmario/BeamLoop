@@ -59,6 +59,9 @@ development or preview build, not Expo Go.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| GET | `/`, `/support` | Public product and customer-support pages |
+| GET | `/legal/privacy`, `/legal/terms` | Public legal documents |
+| GET | `/account-deletion` | Public account-deletion instructions |
 | POST | `/auth/signup`, `/auth/login` | Create or start a BeamLoop session |
 | GET / DELETE | `/auth/me` | Read or remove the BeamLoop account |
 | GET | `/connections` | Current platform states |

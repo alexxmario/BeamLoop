@@ -28,6 +28,18 @@ for (const name of ["APP_JWT_SECRET", "POSTFORME_API_KEY", "CONNECT_REDIRECT_URL
   }
 }
 
+for (const name of ["PUBLIC_LEGAL_NAME", "SUPPORT_EMAIL"]) {
+  const value = process.env[name];
+  if (!value) fail(`${name} must be set to the public App Store contact value.`);
+}
+
+if (
+  process.env.SUPPORT_EMAIL &&
+  !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(process.env.SUPPORT_EMAIL)
+) {
+  fail("SUPPORT_EMAIL must be a valid monitored email address.");
+}
+
 if ((process.env.APP_JWT_SECRET?.length ?? 0) < 32) {
   fail("APP_JWT_SECRET must be a unique, random value of at least 32 characters.");
 }
@@ -71,6 +83,20 @@ if (productionApiUrl?.startsWith("https://")) {
     } else {
       const body = await response.json();
       if (body?.ok !== true) fail("Production API health check did not return { ok: true }.");
+    }
+    for (const path of [
+      "/",
+      "/support",
+      "/account-deletion",
+      "/legal/privacy",
+      "/legal/terms",
+    ]) {
+      const pageResponse = await fetch(new URL(path, productionApiUrl), {
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!pageResponse.ok || !pageResponse.headers.get("content-type")?.includes("text/html")) {
+        fail(`Public page ${path} is unavailable or is not HTML.`);
+      }
     }
   } catch {
     fail(`Production API is unreachable at ${productionApiUrl}/health.`);
