@@ -321,6 +321,7 @@ export default function ComposeModal() {
   const [error, setError] = useState<string | null>(null);
   // Keep this key if the network drops so a manual retry cannot publish twice.
   const [idempotencyKey, setIdempotencyKey] = useState(createIdempotencyKey);
+  const checkingLater = useRef(false);
 
   const refreshIdeas = useCallback(() => {
     if (user) setIdeas(listIdeas(user.id));
@@ -475,6 +476,7 @@ export default function ComposeModal() {
 
   const publish = async () => {
     if (!media) return;
+    checkingLater.current = false;
     setStep({ name: "transmitting" });
     setError(null);
     const started = Date.now();
@@ -491,10 +493,14 @@ export default function ComposeModal() {
         media.kind === "video"
           ? await uploadVideo(media.items[0]!, options, idempotencyKey)
           : await uploadPhotos(media.items, options, idempotencyKey);
-      setStep({ name: "done", post, elapsedMs: Date.now() - started });
+      if (!checkingLater.current) {
+        setStep({ name: "done", post, elapsedMs: Date.now() - started });
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
-      setStep({ name: "edit" });
+      if (!checkingLater.current) {
+        setError(e instanceof Error ? e.message : "Upload failed");
+        setStep({ name: "edit" });
+      }
     }
   };
 
@@ -534,6 +540,11 @@ export default function ComposeModal() {
         platforms={selectedList}
         scheduled={Boolean(scheduledAt)}
         launchDrop={launchDrop}
+        onCheckLater={() => {
+          checkingLater.current = true;
+          router.back();
+          router.push("/(tabs)/history");
+        }}
       />
     );
   }
@@ -2122,10 +2133,12 @@ function TransmitScreen({
   platforms,
   scheduled,
   launchDrop,
+  onCheckLater,
 }: {
   platforms: Platform[];
   scheduled: boolean;
   launchDrop: boolean;
+  onCheckLater: () => void;
 }) {
   const reducedMotion = useReducedMotion();
   const beam = useRef(new Animated.Value(0.25)).current;
@@ -2294,6 +2307,34 @@ function TransmitScreen({
             : scheduled
               ? "locking in every channel…"
               : "confirming with each channel…"}
+        </Text>
+        <Pressable
+          onPress={onCheckLater}
+          accessibilityRole="button"
+          style={{
+            marginTop: spacing.xl,
+            minHeight: 48,
+            paddingHorizontal: spacing.xl,
+            borderRadius: radius.pill,
+            borderWidth: 1,
+            borderColor: palette.borderStrong,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: palette.strip,
+          }}
+        >
+          <Text style={{ ...type.buttonSm, color: palette.text }}>Check later</Text>
+        </Pressable>
+        <Text
+          style={{
+            ...type.bodyXs,
+            color: palette.textSecondary,
+            textAlign: "center",
+            marginTop: spacing.sm,
+            maxWidth: 260,
+          }}
+        >
+          BeamLoop will keep working. Follow each channel in History.
         </Text>
       </View>
     </SafeAreaView>

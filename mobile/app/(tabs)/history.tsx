@@ -67,7 +67,14 @@ export default function HistoryScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
+      // "Check later" can arrive before the upload request has created its
+      // History record. Briefly refresh on focus so the new item appears
+      // without requiring a manual pull-to-refresh.
+      const timers = [2_000, 5_000, 10_000, 20_000].map((delay) =>
+        setTimeout(() => void load(), delay)
+      );
+      return () => timers.forEach(clearTimeout);
     }, [load])
   );
 
