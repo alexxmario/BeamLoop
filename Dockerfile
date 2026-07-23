@@ -20,8 +20,10 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/legal ./legal
 
-RUN mkdir -p /app/data && chown -R node:node /app
-USER node
+# Railway mounts persistent volumes after the image is built. The mount is
+# root-owned, so the runtime must retain permission to initialize SQLite and
+# media directories on that volume.
+RUN mkdir -p /app/data
 
 EXPOSE 3000
 CMD ["npm", "start"]
