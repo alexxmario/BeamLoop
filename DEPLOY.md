@@ -9,10 +9,10 @@ The backend is a Node/Fastify server in `server/`. It stores data in SQLite
 (`better-sqlite3`) plus media on disk, both under `DATA_DIR`.
 
 1. **Create the project.** In Railway, "New Project → Deploy from GitHub repo"
-   (push this repo to GitHub first). Set the service **Root Directory** to
-   `server` so Railway builds only the backend.
-2. **Config is committed** in `server/railway.json` (Nixpacks build,
-   `npm run build` → `npm start`, health check at `/health`).
+   and choose this repository. The repository-root `Dockerfile` builds only the
+   backend, so the service Root Directory can stay `/`.
+2. **Config is committed** in the root `railway.json` (production Docker build,
+   `npm start`, health check at `/health`).
 3. **Add a persistent volume.** Railway → service → Volumes → mount at
    `/app/data`. Container filesystems are wiped on every redeploy, so the
    SQLite DB and retry media MUST live on a volume or you lose all accounts.

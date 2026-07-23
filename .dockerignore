@@ -1,0 +1,15 @@
+.git
+.gitignore
+.mobile-git-backup
+.claude
+**/.claude
+**/.DS_Store
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules
+**/dist
+server/data
+mobile
+Beamloop.html
+*.log
