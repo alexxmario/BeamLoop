@@ -11,7 +11,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://alexs-macbook-air-3.local:3001"
+        "EXPO_PUBLIC_API_URL": "https://beamloop-production.up.railway.app"
       }
     },
     "preview": {

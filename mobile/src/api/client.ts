@@ -1,6 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000";
+export const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL ?? "https://beamloop-production.up.railway.app";
 
 const TOKEN_KEY = "beamloop.sessionToken";
 
@@ -34,11 +35,14 @@ async function fetchWithTimeout(
   } catch (e) {
     if (controller.signal.aborted) {
       throw new ApiError(
-        "Can't reach the BeamLoop server — is it running and on the same network?",
+        "BeamLoop took too long to respond. Check your connection and try again.",
         0
       );
     }
-    throw e;
+    throw new ApiError(
+      "Can't reach BeamLoop. Check your internet connection and try again.",
+      0
+    );
   } finally {
     clearTimeout(timer);
   }
