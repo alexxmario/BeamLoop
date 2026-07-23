@@ -341,38 +341,19 @@ async function refreshPending(userId: string, socialExternalId = userId): Promis
     } catch {
       continue;
     }
-    // Give a post up to 20 min to finish; after that, treat still-pending
-    // channels as failed (e.g. a disconnected/blocked account hanging it) so
-    // the UI resolves instead of showing "Publishing…" forever.
-    const STALE_MS = 20 * 60 * 1000;
-    const startedAt = post.scheduledAt ?? post.createdAt;
-    const stale = Date.now() - new Date(startedAt).getTime() > STALE_MS;
-
     const updated = post.results
       .filter((r) => r.pending)
       .map((r) => {
         const accountId = idByPlatform.get(r.platform);
-        if (!accountId) {
-          return stale
-            ? {
-                platform: r.platform,
-                success: false,
-                error: "Connection unavailable — reconnect, then retry from History",
-              }
-            : null;
-        }
+        // A missing result is not proof of failure. Platforms can publish
+        // before Post for Me exposes the final per-account result, so preserve
+        // "pending" until the provider explicitly reports success or failure.
+        if (!accountId) return null;
         const resolved = toResult(
           r.platform,
           pfmResults.find((x) => x.social_account_id === accountId)
         );
         if (!resolved.pending) return resolved;
-        if (stale) {
-          return {
-            platform: r.platform,
-            success: false,
-            error: "Timed out — retry from History",
-          };
-        }
         return null;
       })
       .filter((r): r is { platform: string } & PlatformResult => r !== null);
@@ -607,7 +588,11 @@ export default async function uploadRoutes(app: FastifyInstance) {
     if (!body.success) {
       return reply.code(400).send({ error: body.error.issues[0]?.message });
     }
-    const failed = post.results.filter((r) => !r.success).map((r) => r.platform);
+    // Never retry a merely-unconfirmed platform: it may already be live and a
+    // retry could create a duplicate. Only explicit provider failures qualify.
+    const failed = post.results
+      .filter((r) => !r.success && !r.pending)
+      .map((r) => r.platform);
     const platforms = (body.data.platforms ?? failed) as Platform[];
     if (platforms.length === 0) {
       return reply.code(400).send({ error: "Nothing to retry" });

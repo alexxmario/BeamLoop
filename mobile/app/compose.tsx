@@ -32,6 +32,7 @@ import Svg, {
 } from "react-native-svg";
 import {
   fetchConnections,
+  fetchHistory,
   uploadPhotos,
   uploadVideo,
   type PickedMedia,
@@ -336,6 +337,42 @@ export default function ComposeModal() {
   useEffect(() => {
     if (!scheduledAt || selected.size < 2) setLaunchDrop(false);
   }, [scheduledAt, selected]);
+
+  const pendingPostId =
+    step.name === "done" &&
+    !step.post.scheduledAt &&
+    step.post.results.some((result) => result.pending)
+      ? step.post.id
+      : null;
+
+  // Keep the result screen live while the provider finishes each platform.
+  // A platform may already be public before its final result reaches BeamLoop.
+  useEffect(() => {
+    if (!pendingPostId) return;
+    let active = true;
+
+    const refreshResult = async () => {
+      try {
+        const history = await fetchHistory();
+        const fresh = history.find((post) => post.id === pendingPostId);
+        if (!active || !fresh) return;
+        setStep((current) =>
+          current.name === "done" && current.post.id === pendingPostId
+            ? { ...current, post: fresh }
+            : current
+        );
+      } catch {
+        // The result screen remains usable; History can retry the refresh.
+      }
+    };
+
+    void refreshResult();
+    const timer = setInterval(() => void refreshResult(), 5_000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [pendingPostId]);
 
   const applyChannelGroup = (platforms: Platform[]) => {
     const live = new Set(connections.map((connection) => connection.platform));
@@ -2335,7 +2372,9 @@ function SuccessScreen({
   const results = post.results;
   const nodes = nodePositions(results.length);
   const okCount = results.filter((r) => r.success).length;
-  const anyPending = results.some((r) => r.pending);
+  const pendingCount = results.filter((r) => r.pending).length;
+  const anyPending = pendingCount > 0;
+  const failedCount = results.length - okCount - pendingCount;
   const scheduled = Boolean(
     post.scheduledAt && new Date(post.scheduledAt).getTime() > Date.now()
   );
@@ -2344,6 +2383,11 @@ function SuccessScreen({
   const launchDrop = scheduled && Boolean(post.launchDrop);
   const allOk = okCount === results.length;
   const seconds = (elapsedMs / 1000).toFixed(1);
+  const hubColor = scheduled || allOk
+    ? palette.signal
+    : anyPending || okCount > 0
+      ? palette.warning
+      : palette.danger;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.console }}>
@@ -2488,19 +2532,32 @@ function SuccessScreen({
               ]}
             >
               <Stripes
-                colorA={palette.signal}
-                colorB={palette.signalDim}
+                colorA={hubColor}
+                colorB={anyPending ? palette.strip : palette.signalDim}
                 spacing={12}
                 style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
               />
-              <Svg width={26} height={26} viewBox="0 0 24 24">
-                <Path
-                  d="M5 13l4 4L19 7"
-                  stroke={palette.console}
-                  strokeWidth={3}
-                  fill="none"
-                />
-              </Svg>
+              {anyPending ? (
+                <SpinnerCore />
+              ) : (
+                <Svg width={26} height={26} viewBox="0 0 24 24">
+                  {allOk || scheduled || okCount > 0 ? (
+                    <Path
+                      d="M5 13l4 4L19 7"
+                      stroke={palette.console}
+                      strokeWidth={3}
+                      fill="none"
+                    />
+                  ) : (
+                    <Path
+                      d="M6 6l12 12M18 6L6 18"
+                      stroke={palette.console}
+                      strokeWidth={3}
+                      fill="none"
+                    />
+                  )}
+                </Svg>
+              )}
             </View>
           </View>
         </View>
@@ -2519,7 +2576,9 @@ function SuccessScreen({
                 ? "LAUNCH DROP LOCKED"
                 : "SCHEDULED"
             : anyPending
-            ? "PUBLISHING…"
+            ? okCount > 0
+              ? `${okCount} LIVE · ${pendingCount} CONFIRMING`
+              : "AWAITING CONFIRMATION"
             : allOk
               ? `LIVE IN ${seconds}S`
               : `${okCount} OF ${results.length} LIVE`}
@@ -2530,7 +2589,12 @@ function SuccessScreen({
             color: palette.text,
             marginTop: 10,
             letterSpacing: tracking(-0.01, type.displayHero.fontSize),
+            textAlign: "center",
+            alignSelf: "stretch",
           }}
+          numberOfLines={2}
+          adjustsFontSizeToFit
+          minimumFontScale={0.72}
         >
           {scheduled
             ? scheduledFailures > 0
@@ -2539,7 +2603,9 @@ function SuccessScreen({
                 ? `${results.length} channels. One moment.`
                 : formatSchedule(post.scheduledAt!)
             : anyPending
-            ? `Publishing to ${results.length}…`
+            ? okCount > 0
+              ? `${okCount} live.\n${pendingCount} finishing.`
+              : "Posting now…"
             : allOk
               ? `Live on ${okCount}.`
               : `Live on ${okCount} of ${results.length}.`}
@@ -2560,14 +2626,20 @@ function SuccessScreen({
                 ? `Your coordinated release is locked for ${formatSchedule(post.scheduledAt!)}. You can cancel the entire drop from History.`
                 : `Everything is queued for ${results.length} channel${results.length === 1 ? "" : "s"}. You can cancel it from History before it goes live.`
             : anyPending
-            ? "Still publishing on some channels — this can take a minute for video. Check History for the final status."
+            ? okCount > 0
+              ? `${okCount} channel${okCount === 1 ? " is" : "s are"} confirmed live. BeamLoop is still waiting for ${pendingCount} final confirmation${pendingCount === 1 ? "" : "s"}.`
+              : "The platforms accepted your post. Some may already be live while BeamLoop waits for their final confirmations; this screen updates automatically."
             : allOk
               ? "Your post is out on every channel you picked."
-              : "The rest went out fine — retry the failed channel from History."}
+              : failedCount > 0 && okCount > 0
+                ? `${okCount} went live. Open History for the ${failedCount} channel${failedCount === 1 ? "" : "s"} that failed.`
+                : "No channel confirmed the post. Open History for the provider details."}
         </Text>
         <View style={[s.row, { gap: spacing.md, alignSelf: "stretch", marginTop: 26 }]}>
           <Pressable style={[s.buttonSecondary, { flex: 1 }]} onPress={onViewPosts}>
-            <Text style={s.buttonSecondaryText}>{scheduled ? "View schedule" : "View posts"}</Text>
+            <Text style={s.buttonSecondaryText}>
+              {scheduled ? "View schedule" : anyPending ? "View status" : "View posts"}
+            </Text>
           </Pressable>
           <Pressable style={[s.buttonPrimary, { flex: 1 }]} onPress={onPostAnother}>
             <Text style={{ ...type.buttonHero, fontSize: 16, color: palette.console }}>

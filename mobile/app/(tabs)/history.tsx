@@ -4,13 +4,13 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Linking,
   Pressable,
   RefreshControl,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Circle, Path } from "react-native-svg";
 import { cancelScheduledPost, fetchHistory, retryPost } from "../../src/api/beamloop";
 import {
   PLATFORM_LABELS,
@@ -18,6 +18,7 @@ import {
   type PostRecord,
 } from "../../src/api/types";
 import { SpinArc } from "../../src/components/SpinArc";
+import { PlatformGlyph } from "../../src/components/PlatformGlyph";
 import { Stripes } from "../../src/components/Stripes";
 import {
   fonts,
@@ -52,6 +53,7 @@ export default function HistoryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [retrying, setRetrying] = useState<string | null>(null);
   const [canceling, setCanceling] = useState<string | null>(null);
+  const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -153,9 +155,10 @@ export default function HistoryScreen() {
       p.scheduledAt && new Date(p.scheduledAt).getTime() > Date.now()
     );
     const hasFail = p.results.some(isFailed);
+    const hasPosted = p.results.some((result) => result.success);
     if (filter === "scheduled") return isScheduled;
     if (filter === "failed") return hasFail;
-    if (filter === "posted") return !hasFail && !isScheduled;
+    if (filter === "posted") return hasPosted && !isScheduled;
     return true;
   });
 
@@ -243,6 +246,10 @@ export default function HistoryScreen() {
             post={item}
             retrying={retrying === item.id}
             canceling={canceling === item.id}
+            expanded={expandedPostId === item.id}
+            onToggle={() =>
+              setExpandedPostId((current) => (current === item.id ? null : item.id))
+            }
             onRetry={() => retry(item)}
             onCancel={() => cancel(item)}
           />
@@ -309,18 +316,23 @@ function PostRow({
   post,
   retrying,
   canceling,
+  expanded,
+  onToggle,
   onRetry,
   onCancel,
 }: {
   post: PostRecord;
   retrying: boolean;
   canceling: boolean;
+  expanded: boolean;
+  onToggle: () => void;
   onRetry: () => void;
   onCancel: () => void;
 }) {
   const failed = post.results.filter((r) => !r.success && !r.pending);
   const hasFail = failed.length > 0;
-  const hasPending = post.results.some((r) => r.pending);
+  const pendingCount = post.results.filter((r) => r.pending).length;
+  const hasPending = pendingCount > 0;
   const isScheduled = Boolean(
     post.scheduledAt && new Date(post.scheduledAt).getTime() > Date.now()
   );
@@ -338,7 +350,12 @@ function PostRow({
         overflow: "hidden",
       }}
     >
-      <View style={{ flexDirection: "row", gap: spacing.rowPad, padding: spacing.rowPad }}>
+      <Pressable
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityLabel={`${expanded ? "Hide" : "Show"} details for ${post.title}`}
+        style={{ flexDirection: "row", gap: spacing.rowPad, padding: spacing.rowPad }}
+      >
         {/* striped thumb with hue spine */}
         <View
           style={{
@@ -356,12 +373,17 @@ function PostRow({
 
         <View style={{ flex: 1, minWidth: 0, justifyContent: "space-between" }}>
           <View>
-            <Text
-              numberOfLines={2}
-              style={{ ...type.itemTitleSm, color: palette.text }}
-            >
-              {post.title}
-            </Text>
+            <View style={[s.row, { justifyContent: "space-between", gap: spacing.sm }]}>
+              <Text
+                numberOfLines={2}
+                style={{ ...type.itemTitleSm, color: palette.text, flex: 1 }}
+              >
+                {post.title}
+              </Text>
+              <Text style={{ ...type.monoMeta, color: palette.textMono, flexShrink: 0 }}>
+                {expanded ? "HIDE ↑" : "DETAILS ↓"}
+              </Text>
+            </View>
             <Text style={{ ...type.monoMeta, color: palette.textLabel, marginTop: 4 }}>
               {isScheduled
                 ? `${post.launchDrop ? "LAUNCH DROP" : "GOES LIVE"} ${monthDay(post.scheduledAt!)}`
@@ -399,14 +421,124 @@ function PostRow({
                     ? `Launch Drop · ${post.results.length} synchronized`
                     : `Scheduled · ${post.results.length} channel${post.results.length === 1 ? "" : "s"}`
                 : hasFail
-                ? `${failed.length} of ${post.results.length} failed`
+                ? okCount > 0
+                  ? `${okCount} live · ${failed.length} failed`
+                  : `${failed.length} failed`
                 : hasPending
-                  ? "Publishing…"
+                  ? okCount > 0
+                    ? `${okCount} live · ${pendingCount} confirming`
+                    : `${pendingCount} awaiting confirmation`
                   : `All ${post.results.length} live`}
             </Text>
           </View>
         </View>
-      </View>
+      </Pressable>
+
+      {expanded && (
+        <View
+          style={{
+            borderTopWidth: 1,
+            borderTopColor: palette.borderFaint,
+            padding: spacing.rowPad,
+            gap: spacing.sm,
+          }}
+        >
+          <Text style={s.sectionLabel}>Channel results</Text>
+          {post.results.map((result) => (
+            <View
+              key={result.platform}
+              style={{
+                backgroundColor: palette.console,
+                borderWidth: 1,
+                borderColor: result.success
+                  ? palette.border
+                  : result.pending
+                    ? palette.borderStrong
+                    : palette.dangerBorderSoft,
+                borderRadius: radius.input,
+                padding: spacing.md,
+                gap: 7,
+              }}
+            >
+              <View style={[s.row, { justifyContent: "space-between", gap: spacing.md }]}>
+                <View style={[s.row, { gap: spacing.sm, flex: 1 }]}>
+                  <PlatformGlyph
+                    platform={result.platform}
+                    size={17}
+                    color={
+                      result.success
+                        ? platformHue[result.platform]
+                        : result.pending
+                          ? palette.warning
+                          : palette.danger
+                    }
+                  />
+                  <Text style={{ ...type.itemTitleSm, color: palette.text }}>
+                    {PLATFORM_LABELS[result.platform]}
+                  </Text>
+                </View>
+                <Text
+                  style={{
+                    ...type.monoMeta,
+                    color: result.success
+                      ? palette.success
+                      : result.pending
+                        ? palette.warning
+                        : palette.danger,
+                  }}
+                >
+                  {result.success ? "LIVE" : result.pending ? "CONFIRMING" : "FAILED"}
+                </Text>
+              </View>
+              {result.pending && (
+                <Text style={{ ...type.bodyXs, color: palette.textSecondary }}>
+                  The platform may already be live; BeamLoop is waiting for its final result.
+                </Text>
+              )}
+              {result.error && (
+                <Text style={{ ...type.bodyXs, color: palette.danger }}>
+                  {result.error}
+                </Text>
+              )}
+              {result.url && (
+                <Pressable
+                  onPress={() => void Linking.openURL(result.url!)}
+                  hitSlop={8}
+                  style={{ alignSelf: "flex-start", paddingVertical: 3 }}
+                >
+                  <Text style={{ ...type.monoMeta, color: palette.signal }}>
+                    OPEN LIVE POST ↗
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          ))}
+
+          {hasFail && !isScheduled && (
+            retrying ? (
+              <View style={[s.row, { justifyContent: "center", paddingVertical: 6 }]}>
+                <SpinArc size={16} color={palette.danger} />
+              </View>
+            ) : (
+              <Pressable
+                onPress={onRetry}
+                style={{
+                  alignSelf: "flex-start",
+                  paddingVertical: 7,
+                  paddingHorizontal: 12,
+                  borderRadius: radius.pill,
+                  borderWidth: 1,
+                  borderColor: palette.dangerBorder,
+                }}
+              >
+                <Text style={{ ...type.monoMeta, color: palette.danger }}>
+                  Retry {failed.length === 1 ? failedLabels : `${failed.length} platforms`} ›
+                </Text>
+              </Pressable>
+            )
+          )}
+        </View>
+      )}
 
       {isScheduled && (
         <View
@@ -434,62 +566,6 @@ function PostRow({
         </View>
       )}
 
-      {/* failure detail + single retry action */}
-      {hasFail && (
-        <View
-          style={{
-            backgroundColor: palette.dangerBgSoft,
-            borderTopWidth: 1,
-            borderTopColor: palette.dangerBorderSoft,
-            padding: spacing.rowPad,
-            gap: spacing.sm,
-          }}
-        >
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <Svg width={16} height={16} viewBox="0 0 24 24" style={{ marginTop: 2, flexShrink: 0 }}>
-              <Circle cx={12} cy={12} r={9} stroke={palette.danger} strokeWidth={2} fill="none" />
-              <Path d="M12 7v6M12 16.5v.5" stroke={palette.danger} strokeWidth={2} />
-            </Svg>
-            <View style={{ flex: 1 }}>
-              <Text style={{ ...type.bodyXs, fontFamily: fonts.semibold, color: palette.danger }}>
-                {failedLabels} didn't go out
-              </Text>
-              <Text style={{ ...type.mono, fontSize: 12, color: palette.textSecondary, marginTop: 2 }}>
-                {failed[0]?.error ?? "The platform rejected the post."}
-                {okCount > 0 ? ` The other ${okCount} went out fine.` : ""}
-              </Text>
-            </View>
-          </View>
-          {isScheduled ? null : retrying ? (
-            <View style={[s.row, { justifyContent: "center", paddingVertical: 6 }]}>
-              <SpinArc size={16} color={palette.danger} />
-            </View>
-          ) : (
-            <Pressable
-              onPress={onRetry}
-              style={{
-                alignSelf: "flex-start",
-                paddingVertical: 6,
-                paddingHorizontal: 12,
-                borderRadius: radius.pill,
-                borderWidth: 1,
-                borderColor: palette.dangerBorder,
-              }}
-              hitSlop={8}
-            >
-              <Text
-                style={{
-                  ...type.monoMeta,
-                  color: palette.danger,
-                  letterSpacing: tracking(monoTracking.status, type.monoMeta.fontSize),
-                }}
-              >
-                Retry {failed.length === 1 ? failedLabels : `${failed.length} platforms`} ›
-              </Text>
-            </Pressable>
-          )}
-        </View>
-      )}
     </View>
   );
 }
@@ -518,25 +594,11 @@ function StatusPip({
         borderColor: outline,
       }}
     >
-      <Svg width={ok ? 11 : 10} height={ok ? 11 : 10} viewBox="0 0 24 24">
-        {ok ? (
-          <Path
-            d="M5 13l4 4L19 7"
-            stroke={palette.console}
-            strokeWidth={3.5}
-            fill="none"
-          />
-        ) : pending ? (
-          <Circle cx={12} cy={12} r={3} fill={palette.warning} />
-        ) : (
-          <Path
-            d="M6 6l12 12M18 6L6 18"
-            stroke={palette.danger}
-            strokeWidth={3.5}
-            fill="none"
-          />
-        )}
-      </Svg>
+      <PlatformGlyph
+        platform={platform as Platform}
+        size={11}
+        color={ok ? palette.console : outline}
+      />
     </View>
   );
 }
