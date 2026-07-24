@@ -54,6 +54,13 @@ export interface PfmFeedPost {
   posted_at?: string | null;
 }
 
+export interface PfmWebhook {
+  id: string;
+  url: string;
+  secret: string;
+  event_types: string[];
+}
+
 export interface PfmSocialPost {
   id: string;
   caption: string;
@@ -172,6 +179,21 @@ export const postForMe = {
       `/v1/social-account-feeds/${encodeURIComponent(accountId)}?limit=${limit}`
     );
     return Array.isArray(res) ? res : res.data ?? [];
+  },
+
+  async listWebhooks(): Promise<PfmWebhook[]> {
+    const res = await request<{ data?: PfmWebhook[] } | PfmWebhook[]>(
+      "GET",
+      "/v1/webhooks?limit=100"
+    );
+    return Array.isArray(res) ? res : res.data ?? [];
+  },
+
+  createWebhook(url: string, eventTypes: string[]) {
+    return request<PfmWebhook>("POST", "/v1/webhooks", {
+      url,
+      event_types: eventTypes,
+    });
   },
 
   // POST /v1/social-accounts/{id}/disconnect

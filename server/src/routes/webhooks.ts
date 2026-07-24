@@ -52,16 +52,41 @@ function errorText(error: unknown): string {
 }
 
 export default async function webhookRoutes(app: FastifyInstance) {
+  let activeSecret = config.POSTFORME_WEBHOOK_SECRET;
+  const webhookUrl = new URL("/webhooks/post-for-me", config.PUBLIC_BASE_URL).toString();
+  const eventTypes = ["social.post.result.created"];
+
+  const ensureWebhook = async () => {
+    if (config.POSTFORME_WEBHOOK_SECRET) return;
+    const webhooks = await postForMe.listWebhooks();
+    const existing = webhooks.find((webhook) => webhook.url === webhookUrl);
+    const webhook =
+      existing ?? (await postForMe.createWebhook(webhookUrl, eventTypes));
+    activeSecret = webhook.secret;
+    app.log.info(
+      { webhookId: webhook.id, created: !existing },
+      "Post for Me confirmation webhook is ready"
+    );
+  };
+
+  // The API key can securely recover the generated webhook secret after a
+  // restart. An explicit env secret still takes precedence and skips this
+  // provider call.
+  if (!activeSecret) {
+    void ensureWebhook().catch((err) =>
+      app.log.error({ err }, "Could not configure Post for Me webhook")
+    );
+  }
+
   app.post("/webhooks/post-for-me", async (req, reply) => {
-    const configuredSecret = config.POSTFORME_WEBHOOK_SECRET;
-    if (!configuredSecret) {
-      app.log.error("POSTFORME_WEBHOOK_SECRET is not configured");
+    if (!activeSecret) {
+      app.log.error("Post for Me webhook secret is not ready");
       return reply.code(503).send({ error: "Webhook is not configured" });
     }
 
     const rawSecret = req.headers["post-for-me-webhook-secret"];
     const suppliedSecret = Array.isArray(rawSecret) ? rawSecret[0] : rawSecret;
-    if (!suppliedSecret || !secureEquals(suppliedSecret, configuredSecret)) {
+    if (!suppliedSecret || !secureEquals(suppliedSecret, activeSecret)) {
       return reply.code(401).send({ error: "Invalid webhook secret" });
     }
 

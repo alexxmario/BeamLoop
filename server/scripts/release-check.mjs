@@ -24,7 +24,6 @@ function read(path) {
 for (const name of [
   "APP_JWT_SECRET",
   "POSTFORME_API_KEY",
-  "POSTFORME_WEBHOOK_SECRET",
   "CONNECT_REDIRECT_URL",
 ]) {
   const value = process.env[name];
