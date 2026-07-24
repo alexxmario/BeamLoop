@@ -9,6 +9,7 @@ process.env.DATA_DIR = dataDir;
 process.env.APP_JWT_SECRET = "webhook-contract-check-session-secret";
 process.env.POSTFORME_API_KEY = "webhook-contract-check-api-key";
 process.env.POSTFORME_WEBHOOK_SECRET = "webhook-contract-check-provider-secret";
+globalThis.fetch = async () => Response.json({ data: [] });
 
 try {
   const [{ postStore }, { default: webhookRoutes }] = await Promise.all([
@@ -68,6 +69,30 @@ try {
   assert.equal(updated?.results[0]?.pending, undefined);
   assert.equal(updated?.results[0]?.post_id, "ig_contract_check");
   assert.equal(updated?.results[0]?.url, "https://example.test/live-post");
+
+  const failed = await app.inject({
+    method: "POST",
+    url: "/webhooks/post-for-me",
+    headers: {
+      "post-for-me-webhook-secret":
+        process.env.POSTFORME_WEBHOOK_SECRET,
+    },
+    payload: {
+      event_type: "social.post.result.created",
+      data: {
+        post_id: "sp_contract_check",
+        social_account_id: "spc_contract_check",
+        success: false,
+        error: "Provider rejected the post",
+        platform_data: null,
+      },
+    },
+  });
+  assert.equal(failed.statusCode, 204);
+  assert.equal(
+    postStore.findById(post.id)?.results[0]?.error,
+    "Provider rejected the post"
+  );
 
   await app.close();
   console.log("Post for Me webhook confirmation contract check passed.");

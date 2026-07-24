@@ -21,6 +21,7 @@ const resultSchema = z.object({
       id: z.string().optional(),
       url: z.string().optional(),
     })
+    .nullable()
     .optional(),
 });
 
