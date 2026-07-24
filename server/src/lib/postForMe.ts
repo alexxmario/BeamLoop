@@ -46,11 +46,20 @@ export interface PfmPostResult {
   platform_data?: { id?: string; url?: string };
 }
 
+export interface PfmFeedPost {
+  platform: string;
+  social_post_id?: string | null;
+  platform_post_id?: string;
+  platform_url?: string;
+  posted_at?: string | null;
+}
+
 export interface PfmSocialPost {
   id: string;
   caption: string;
   status: "draft" | "scheduled" | "processing" | "processed";
   created_at: string;
+  external_id?: string | null;
 }
 
 // Per-platform overrides sent as `platform_configurations`. `caption` covers
@@ -143,6 +152,28 @@ export const postForMe = {
     return Array.isArray(res) ? res : res.data ?? [];
   },
 
+  getAccount(id: string) {
+    return request<PfmSocialAccount>(
+      "GET",
+      `/v1/social-accounts/${encodeURIComponent(id)}`
+    );
+  },
+
+  getPost(id: string) {
+    return request<PfmSocialPost>(
+      "GET",
+      `/v1/social-posts/${encodeURIComponent(id)}`
+    );
+  },
+
+  async listAccountFeed(accountId: string, limit = 10): Promise<PfmFeedPost[]> {
+    const res = await request<{ data?: PfmFeedPost[] } | PfmFeedPost[]>(
+      "GET",
+      `/v1/social-account-feeds/${encodeURIComponent(accountId)}?limit=${limit}`
+    );
+    return Array.isArray(res) ? res : res.data ?? [];
+  },
+
   // POST /v1/social-accounts/{id}/disconnect
   disconnectAccount(id: string) {
     return request<unknown>(
@@ -184,6 +215,7 @@ export const postForMe = {
     mediaUrls?: string[];
     platformConfigurations?: Partial<Record<PfmPlatform, PfmPlatformConfig>>;
     scheduledAt?: string;
+    externalId?: string;
   }) {
     return request<PfmSocialPost>("POST", "/v1/social-posts", {
       caption: input.caption,
@@ -195,7 +227,19 @@ export const postForMe = {
         ? { platform_configurations: input.platformConfigurations }
         : {}),
       ...(input.scheduledAt ? { scheduled_at: input.scheduledAt } : {}),
+      ...(input.externalId ? { external_id: input.externalId } : {}),
     });
+  },
+
+  // Recover a post after an ambiguous create response. The provider documents
+  // external_id as both a create field and an exact list filter.
+  async findPostByExternalId(externalId: string): Promise<PfmSocialPost | undefined> {
+    const res = await request<{ data?: PfmSocialPost[] } | PfmSocialPost[]>(
+      "GET",
+      `/v1/social-posts?external_id=${encodeURIComponent(externalId)}&limit=1`
+    );
+    const posts = Array.isArray(res) ? res : res.data ?? [];
+    return posts[0];
   },
 
   // Cancels a provider-side draft or scheduled post before it is published.
@@ -204,10 +248,14 @@ export const postForMe = {
   },
 
   // GET /v1/social-post-results?post_id=<id> — one result per account.
-  async listPostResults(postId: string): Promise<PfmPostResult[]> {
+  async listPostResults(postId: string | string[]): Promise<PfmPostResult[]> {
+    const postIds = Array.isArray(postId) ? postId : [postId];
+    const query = postIds
+      .map((id) => `post_id=${encodeURIComponent(id)}`)
+      .join("&");
     const res = await request<{ data?: PfmPostResult[] } | PfmPostResult[]>(
       "GET",
-      `/v1/social-post-results?post_id=${encodeURIComponent(postId)}`
+      `/v1/social-post-results?${query}`
     );
     return Array.isArray(res) ? res : res.data ?? [];
   },

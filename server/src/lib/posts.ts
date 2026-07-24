@@ -39,6 +39,12 @@ export interface PostRecord {
   facebookPageId?: string;
   // The Post for Me post id, so we can refresh async results later.
   pfmPostId?: string;
+  // Our stable provider-side lookup key. This lets us recover the provider
+  // post after an ambiguous response without creating a duplicate.
+  pfmExternalId?: string;
+  // Provider account ids captured at acceptance time, so result webhooks can
+  // resolve the correct BeamLoop channel without another provider request.
+  pfmAccountPlatforms?: Record<string, string>;
 }
 
 interface PostRow {
@@ -81,10 +87,13 @@ function write(record: PostRecord) {
 }
 
 export const postStore = {
-  add(post: Omit<PostRecord, "id" | "createdAt">): PostRecord {
+  add(
+    post: Omit<PostRecord, "id" | "createdAt"> & { id?: string }
+  ): PostRecord {
+    const { id = randomUUID(), ...data } = post;
     const record: PostRecord = {
-      ...post,
-      id: randomUUID(),
+      ...data,
+      id,
       createdAt: new Date().toISOString(),
     };
     write(record);
@@ -133,6 +142,21 @@ export const postStore = {
       .prepare("SELECT * FROM posts WHERE userId = ? AND idempotencyKey = ?")
       .get(userId, idempotencyKey) as PostRow | undefined;
     return row ? rowToPost(row) : undefined;
+  },
+
+  findByPfmPostId(pfmPostId: string): PostRecord | undefined {
+    try {
+      const row = db
+        .prepare(
+          "SELECT * FROM posts WHERE json_extract(data, '$.pfmPostId') = ? LIMIT 1"
+        )
+        .get(pfmPostId) as PostRow | undefined;
+      return row ? rowToPost(row) : undefined;
+    } catch {
+      // Keep compatibility with SQLite builds lacking JSON functions.
+      const rows = db.prepare("SELECT * FROM posts").all() as PostRow[];
+      return rows.map(rowToPost).find((post) => post.pfmPostId === pfmPostId);
+    }
   },
 
   delete(id: string): PostRecord | undefined {

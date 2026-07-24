@@ -6,6 +6,9 @@ const envSchema = z.object({
   // Post for Me — our social publishing provider. Backend only.
   POSTFORME_API_KEY: z.string().min(1, "POSTFORME_API_KEY is required"),
   POSTFORME_BASE_URL: z.string().url().default("https://api.postforme.dev"),
+  // Secret returned when the production Post for Me webhook is created.
+  // Webhook requests are rejected unless this is configured.
+  POSTFORME_WEBHOOK_SECRET: z.string().min(16).optional(),
   // TikTok requires a privacy level on every post. Unaudited TikTok apps may
   // ONLY post SELF_ONLY (private); flip to PUBLIC_TO_EVERYONE once your TikTok
   // app passes the Direct Post audit.

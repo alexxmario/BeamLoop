@@ -18,10 +18,12 @@ import {
   postForMe,
   type PfmPlatform,
   type PfmPlatformConfig,
+  type PfmFeedPost,
   type PfmPostResult,
 } from "../lib/postForMe.js";
 import {
   manualStore,
+  ManualDeliveryError,
   postToDiscord,
   postToTelegram,
   type DiscordCredentials,
@@ -139,7 +141,15 @@ function validatePlatformCaptions(
 }
 
 function publicPost(post: PostRecord) {
-  const { userId: _userId, mediaFiles: _mediaFiles, idempotencyKey: _idempotencyKey, ...safe } = post;
+  const {
+    userId: _userId,
+    mediaFiles: _mediaFiles,
+    idempotencyKey: _idempotencyKey,
+    pfmPostId: _pfmPostId,
+    pfmExternalId: _pfmExternalId,
+    pfmAccountPlatforms: _pfmAccountPlatforms,
+    ...safe
+  } = post;
   return safe;
 }
 
@@ -147,17 +157,24 @@ function publicPost(post: PostRecord) {
 // give up). Post for Me publishes asynchronously, so results settle over a
 // few seconds.
 async function awaitResults(postId: string, expectedIds: string[]) {
-  // Post for Me publishes asynchronously; results land over several seconds
-  // (Instagram/YouTube can take 20s+). Poll up to ~35s so we don't report a
-  // "still publishing" post as a failure.
-  const MAX_ATTEMPTS = 8;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const results = await postForMe.listPostResults(postId);
+  // These are read-only confirmation checks, never publish retries. Keep the
+  // initial window deliberately small; slower platforms resolve via the
+  // throttled History refresh instead of being polled aggressively.
+  const delays = [0, 2_000, 5_000];
+  for (const delay of delays) {
+    if (delay > 0) await sleep(delay);
+    let results: PfmPostResult[];
+    try {
+      results = await postForMe.listPostResults(postId);
+    } catch {
+      // The post itself was already accepted. A failed status check must not
+      // turn into another create request.
+      return [];
+    }
     const complete = expectedIds.every((id) =>
       results.some((r) => r.social_account_id === id)
     );
-    if (complete || attempt === MAX_ATTEMPTS - 1) return results;
-    await sleep(1500);
+    if (complete || delay === delays[delays.length - 1]) return results;
   }
   return [];
 }
@@ -172,6 +189,48 @@ function toResult(platform: string, r?: PfmPostResult): { platform: string } & P
     post_id: r.platform_data?.id,
     error: r.success ? undefined : errText(r.error),
   };
+}
+
+function toFeedResult(
+  platform: string,
+  postId: string,
+  feed: PfmFeedPost[]
+): ({ platform: string } & PlatformResult) | undefined {
+  const live = feed.find((entry) => entry.social_post_id === postId);
+  if (!live?.platform_post_id && !live?.platform_url) return undefined;
+  return {
+    platform,
+    success: true,
+    url: live.platform_url,
+    post_id: live.platform_post_id,
+  };
+}
+
+// Post for Me can occasionally leave the result job in "processing" even
+// after a channel is live. Its account feed carries the exact social_post_id,
+// so this is a deterministic confirmation rather than a caption/time guess.
+async function resolveProviderResults(
+  postId: string,
+  platforms: PfmPlatform[],
+  idByPlatform: Map<string, string>,
+  results: PfmPostResult[]
+): Promise<Array<{ platform: string } & PlatformResult>> {
+  return Promise.all(
+    platforms.map(async (platform) => {
+      const accountId = idByPlatform.get(platform)!;
+      const normalized = toResult(
+        platform,
+        results.find((result) => result.social_account_id === accountId)
+      );
+      if (normalized.success) return normalized;
+      try {
+        const feed = await postForMe.listAccountFeed(accountId);
+        return toFeedResult(platform, postId, feed) ?? normalized;
+      } catch {
+        return normalized;
+      }
+    })
+  );
 }
 
 function errText(error: unknown): string {
@@ -197,6 +256,12 @@ async function publish(opts: {
   media: MediaFile[];
   placements?: Record<string, "timeline" | "reels" | "stories">;
   scheduledAt?: string;
+  providerExternalId?: string;
+  onManualDispatch?: (platform: Platform, attemptedAt: string) => void;
+  onProviderAccepted?: (
+    postId: string,
+    accountPlatforms: Record<string, string>
+  ) => void;
 }): Promise<{
   results: Array<{ platform: string } & PlatformResult>;
   pfmPostId?: string;
@@ -211,6 +276,9 @@ async function publish(opts: {
     media,
     placements,
     scheduledAt,
+    providerExternalId,
+    onManualDispatch,
+    onProviderAccepted,
   } = opts;
   const results: Array<{ platform: string } & PlatformResult> = [];
   let pfmPostId: string | undefined;
@@ -238,13 +306,6 @@ async function publish(opts: {
     }
 
     if (selected.length > 0) {
-      // Upload media once; every platform references the same public URLs.
-      const mediaUrls: string[] = [];
-      for (const f of media) {
-        const blob = await openAsBlob(f.path, { type: f.mimetype });
-        mediaUrls.push(await postForMe.uploadMedia(blob, f.mimetype));
-      }
-
       const platformConfigurations: Partial<
         Record<PfmPlatform, PfmPlatformConfig>
       > = {};
@@ -260,23 +321,47 @@ async function publish(opts: {
       }
 
       const accountIds = selected.map((p) => idByPlatform.get(p)!);
-      const post = await postForMe.createPost({
-        caption,
-        socialAccountIds: accountIds,
-        mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
-        platformConfigurations,
-        scheduledAt,
-      });
+      // If a previous create response was lost, recover the provider post by
+      // our stable external id instead of creating a duplicate.
+      let post = providerExternalId
+        ? await postForMe.findPostByExternalId(providerExternalId)
+        : undefined;
+      if (!post) {
+        // Upload media once; every platform references the same public URLs.
+        const mediaUrls: string[] = [];
+        for (const f of media) {
+          const blob = await openAsBlob(f.path, { type: f.mimetype });
+          mediaUrls.push(await postForMe.uploadMedia(blob, f.mimetype));
+        }
+        post = await postForMe.createPost({
+          caption,
+          socialAccountIds: accountIds,
+          mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+          platformConfigurations,
+          scheduledAt,
+          externalId: providerExternalId,
+        });
+      }
       pfmPostId = post.id;
+      onProviderAccepted?.(
+        post.id,
+        Object.fromEntries(
+          selected.map((platform) => [idByPlatform.get(platform)!, platform])
+        )
+      );
 
       if (scheduledAt) {
         for (const p of selected) results.push({ platform: p, success: false, pending: true });
       } else {
         const pfmResults = await awaitResults(post.id, accountIds);
-        for (const p of selected) {
-          const id = idByPlatform.get(p)!;
-          results.push(toResult(p, pfmResults.find((x) => x.social_account_id === id)));
-        }
+        results.push(
+          ...(await resolveProviderResults(
+            post.id,
+            selected,
+            idByPlatform,
+            pfmResults
+          ))
+        );
       }
     }
   }
@@ -288,6 +373,8 @@ async function publish(opts: {
       if (scheduledAt) {
         return { platform: p, success: false, pending: true };
       }
+      const attemptedAt = new Date().toISOString();
+      onManualDispatch?.(p, attemptedAt);
       try {
         if (p === "discord") {
           const stored = manualStore.get<DiscordCredentials>(userId, "discord");
@@ -306,6 +393,15 @@ async function publish(opts: {
         }
         return { platform: p, success: true };
       } catch (e) {
+        if (e instanceof ManualDeliveryError && e.outcome === "unknown") {
+          return {
+            platform: p,
+            success: false,
+            pending: true,
+            attemptedAt,
+            error: e.message,
+          };
+        }
         return {
           platform: p,
           success: false,
@@ -319,13 +415,49 @@ async function publish(opts: {
   return { results, pfmPostId };
 }
 
+const PENDING_REFRESH_MIN_MS = 10_000;
+const pendingRefreshAt = new Map<string, number>();
+
 // Re-fetch async results for posts still showing "pending" and merge them in,
-// so History self-heals once the platforms finish publishing.
+// so History self-heals once the platforms finish publishing. Calls are
+// throttled per user and all pending provider post ids are fetched in one
+// request.
 async function refreshPending(userId: string, socialExternalId = userId): Promise<void> {
+  const now = Date.now();
+  const lastRefresh = pendingRefreshAt.get(userId) ?? 0;
+  if (now - lastRefresh < PENDING_REFRESH_MIN_MS) return;
+  pendingRefreshAt.set(userId, now);
+
   const posts = postStore
     .listByUser(userId)
-    .filter((p) => p.pfmPostId && p.results.some((r) => r.pending));
+    .filter(
+      (p) =>
+        (!p.scheduledAt || new Date(p.scheduledAt).getTime() <= now) &&
+        p.results.some(
+          (r) =>
+            r.pending &&
+            (OAUTH_PLATFORMS as readonly string[]).includes(r.platform)
+        )
+    );
   if (posts.length === 0) return;
+
+  // A process may exit after Post for Me accepted a create request but before
+  // its id reached SQLite. Recover it by external_id; never create it again.
+  for (const post of posts) {
+    if (post.pfmPostId || !post.pfmExternalId) continue;
+    try {
+      const recovered = await postForMe.findPostByExternalId(post.pfmExternalId);
+      if (recovered) {
+        post.pfmPostId = recovered.id;
+        postStore.update(post.id, { pfmPostId: recovered.id });
+      }
+    } catch {
+      // Keep the result unconfirmed. A read failure is never a reason to write.
+    }
+  }
+
+  const pollable = posts.filter((post) => post.pfmPostId);
+  if (pollable.length === 0) return;
 
   const accounts = await postForMe.listAccounts(socialExternalId);
   const idByPlatform = new Map<string, string>();
@@ -333,35 +465,39 @@ async function refreshPending(userId: string, socialExternalId = userId): Promis
     if (a.status === "connected") idByPlatform.set(a.platform, a.id);
   }
 
-  for (const post of posts) {
-    if (post.scheduledAt && new Date(post.scheduledAt).getTime() > Date.now()) continue;
-    let pfmResults: PfmPostResult[] = [];
-    try {
-      pfmResults = await postForMe.listPostResults(post.pfmPostId!);
-    } catch {
-      continue;
-    }
-    const updated = post.results
-      .filter((r) => r.pending)
-      .map((r) => {
-        const accountId = idByPlatform.get(r.platform);
-        // A missing result is not proof of failure. Platforms can publish
-        // before Post for Me exposes the final per-account result, so preserve
-        // "pending" until the provider explicitly reports success or failure.
-        if (!accountId) return null;
-        const resolved = toResult(
-          r.platform,
-          pfmResults.find((x) => x.social_account_id === accountId)
-        );
-        if (!resolved.pending) return resolved;
-        return null;
-      })
-      .filter((r): r is { platform: string } & PlatformResult => r !== null);
+  const postIds = [...new Set(pollable.map((post) => post.pfmPostId!))];
+  const allResults = await postForMe.listPostResults(postIds);
+  for (const post of pollable) {
+    const pfmResults = allResults.filter((result) => result.post_id === post.pfmPostId);
+    const pendingPlatforms = post.results
+      .filter(
+        (r) =>
+          r.pending &&
+          (OAUTH_PLATFORMS as readonly string[]).includes(r.platform)
+      )
+      .map((r) => r.platform)
+      .filter((platform): platform is PfmPlatform =>
+        idByPlatform.has(platform)
+      );
+    const resolved = await resolveProviderResults(
+      post.pfmPostId!,
+      pendingPlatforms,
+      idByPlatform,
+      pfmResults
+    );
+    const updated = resolved.filter((result) => !result.pending);
     if (updated.length > 0) postStore.updateResults(post.id, updated);
   }
 }
 
 const scheduledInFlight = new Set<string>();
+
+function markManualDispatch(postId: string, platform: Platform, attemptedAt: string) {
+  const post = postStore.findById(postId);
+  const current = post?.results.find((result) => result.platform === platform);
+  if (!current) return;
+  postStore.updateResults(postId, [{ ...current, attemptedAt }]);
+}
 
 // Post for Me durably holds OAuth posts until their scheduled time. Discord
 // and Telegram are direct integrations, so this small durable worker picks up
@@ -373,6 +509,7 @@ async function publishDueManualPosts(app: FastifyInstance): Promise<void> {
       .filter(
         (result) =>
           result.pending &&
+          !result.attemptedAt &&
           (MANUAL_PLATFORMS as readonly string[]).includes(result.platform)
       )
       .map((result) => result.platform as Platform);
@@ -398,6 +535,8 @@ async function publishDueManualPosts(app: FastifyInstance): Promise<void> {
         placements: post.placements,
         kind: post.kind,
         media: post.mediaFiles,
+        onManualDispatch: (platform, attemptedAt) =>
+          markManualDispatch(post.id, platform, attemptedAt),
       });
       postStore.updateResults(post.id, results);
     } catch (err) {
@@ -470,27 +609,28 @@ export default async function uploadRoutes(app: FastifyInstance) {
     async function (req: FastifyRequest, reply: FastifyReply) {
       const rawKey = req.headers["idempotency-key"];
       const key = Array.isArray(rawKey) ? rawKey[0] : rawKey;
-      if (key !== undefined && !idempotencyKeySchema.safeParse(key).success) {
+      if (!key) {
+        return reply.code(400).send({ error: "An Idempotency-Key is required" });
+      }
+      if (!idempotencyKeySchema.safeParse(key).success) {
         return reply.code(400).send({ error: "Invalid Idempotency-Key" });
       }
-      if (key) {
-        const previous = postStore.findByIdempotencyKey(req.user.id, key);
-        if (previous) return { post: publicPost(previous), usage: null };
-      }
+      const previous = postStore.findByIdempotencyKey(req.user.id, key);
+      if (previous) return { post: publicPost(previous), usage: null };
 
-      const inFlightKey = key ? `${req.user.id}:${key}` : undefined;
-      if (inFlightKey && inFlightUploads.has(inFlightKey)) {
+      const inFlightKey = `${req.user.id}:${key}`;
+      if (inFlightUploads.has(inFlightKey)) {
         return reply.code(409).send({
           error: "This post is already being sent. Check History in a moment.",
         });
       }
-      if (inFlightKey) inFlightUploads.add(inFlightKey);
+      inFlightUploads.add(inFlightKey);
 
       let collected: Awaited<ReturnType<typeof collectParts>>;
       try {
         collected = await collectParts(req);
       } catch (error) {
-        if (inFlightKey) inFlightUploads.delete(inFlightKey);
+        inFlightUploads.delete(inFlightKey);
         throw error;
       }
       const { files, fields } = collected;
@@ -534,39 +674,88 @@ export default async function uploadRoutes(app: FastifyInstance) {
         const captionError = validatePlatformCaptions(caption, platforms, overrides);
         if (captionError) return reply.code(400).send({ error: captionError });
 
-        const { results, pfmPostId } = await publish({
-          userId: req.user.id,
-          socialExternalId: req.user.socialExternalId,
-          caption,
-          platforms,
-          overrides,
-          kind,
-          media,
-          placements,
-          scheduledAt,
-        });
-
+        // Persist the idempotency record and retry media before the first
+        // external write. A client timeout or server restart can now return
+        // this same post instead of creating another one.
+        const postId = randomUUID();
+        const hasOauthPlatform = platforms.some((platform) =>
+          (OAUTH_PLATFORMS as readonly string[]).includes(platform)
+        );
         const post = postStore.add({
+          id: postId,
           userId: req.user.id,
           idempotencyKey: key,
           kind,
           title,
           description,
           platforms,
-          results,
+          results: platforms.map((platform) => ({
+            platform,
+            success: false,
+            pending: true,
+          })),
           overrides,
           placements,
           scheduledAt,
           launchDrop,
-          pfmPostId,
+          pfmExternalId: hasOauthPlatform ? postId : undefined,
         });
-        const mediaFiles = await persistMedia(post.id, media);
+        let mediaFiles: StoredMedia[];
+        try {
+          mediaFiles = await persistMedia(post.id, media);
+        } catch (error) {
+          // No platform write has started yet, so removing this reservation is
+          // safe and lets the same idempotency key be tried again.
+          postStore.delete(post.id);
+          throw error;
+        }
         postStore.update(post.id, { mediaFiles });
 
-        return { post: publicPost({ ...post, mediaFiles }), usage: null };
+        try {
+          const { results, pfmPostId } = await publish({
+            userId: req.user.id,
+            socialExternalId: req.user.socialExternalId,
+            caption,
+            platforms,
+            overrides,
+            kind,
+            media: mediaFiles,
+            placements,
+            scheduledAt,
+            providerExternalId: hasOauthPlatform ? postId : undefined,
+            onProviderAccepted: (pfmPostId, pfmAccountPlatforms) =>
+              postStore.update(post.id, { pfmPostId, pfmAccountPlatforms }),
+            onManualDispatch: (platform, attemptedAt) =>
+              markManualDispatch(post.id, platform, attemptedAt),
+          });
+          postStore.updateResults(post.id, results);
+          if (pfmPostId) postStore.update(post.id, { pfmPostId });
+        } catch (err) {
+          // The outcome of an interrupted provider call may be ambiguous.
+          // Preserve "pending" and recover by provider external_id later;
+          // never turn this into an automatic second publish.
+          app.log.error({ err, postId: post.id }, "Publish outcome unconfirmed");
+          const current = postStore.findById(post.id);
+          if (current) {
+            postStore.updateResults(
+              post.id,
+              current.results
+                .filter((result) => result.pending)
+                .map((result) => ({
+                  ...result,
+                  error:
+                    result.error ??
+                    "BeamLoop could not confirm this delivery. It will not be sent again automatically.",
+                }))
+            );
+          }
+        }
+
+        const stored = postStore.findById(post.id)!;
+        return { post: publicPost(stored), usage: null };
       } finally {
         await cleanup(files);
-        if (inFlightKey) inFlightUploads.delete(inFlightKey);
+        inFlightUploads.delete(inFlightKey);
       }
     };
 
@@ -588,29 +777,95 @@ export default async function uploadRoutes(app: FastifyInstance) {
     if (!body.success) {
       return reply.code(400).send({ error: body.error.issues[0]?.message });
     }
+    if (post.results.some((result) => result.pending)) {
+      return reply.code(409).send({
+        error:
+          "Wait for every channel to finish confirming before retrying a failed one.",
+      });
+    }
     // Never retry a merely-unconfirmed platform: it may already be live and a
     // retry could create a duplicate. Only explicit provider failures qualify.
     const failed = post.results
       .filter((r) => !r.success && !r.pending)
       .map((r) => r.platform);
-    const platforms = (body.data.platforms ?? failed) as Platform[];
+    const platforms = [
+      ...new Set((body.data.platforms ?? failed) as Platform[]),
+    ];
     if (platforms.length === 0) {
       return reply.code(400).send({ error: "Nothing to retry" });
     }
+    const invalid = platforms.filter((platform) => !failed.includes(platform));
+    if (invalid.length > 0) {
+      return reply.code(409).send({
+        error: "Only channels with an explicit failure can be retried.",
+      });
+    }
 
-    const { results: retried, pfmPostId } = await publish({
-      userId: req.user.id,
-      socialExternalId: req.user.socialExternalId,
-      caption: buildCaption(post.title, post.description),
-      platforms,
-      overrides: post.overrides ?? {},
-      placements: post.placements,
-      kind: post.kind,
-      media: post.mediaFiles,
-    });
+    // Claim this user-approved retry durably before the first external write.
+    // A double tap, timeout, or restart will now see "pending" and cannot
+    // dispatch the same retry again.
+    postStore.updateResults(
+      post.id,
+      platforms.map((platform) => ({
+        platform,
+        success: false,
+        pending: true,
+      }))
+    );
+    const hasOauthPlatform = platforms.some((platform) =>
+      (OAUTH_PLATFORMS as readonly string[]).includes(platform)
+    );
+    const providerExternalId = hasOauthPlatform
+      ? `retry-${randomUUID()}`
+      : undefined;
+    if (providerExternalId) {
+      postStore.update(post.id, {
+        pfmExternalId: providerExternalId,
+        pfmPostId: undefined,
+      });
+    }
 
-    postStore.updateResults(post.id, retried);
-    if (pfmPostId) postStore.update(post.id, { pfmPostId });
+    try {
+      const { results: retried, pfmPostId } = await publish({
+        userId: req.user.id,
+        socialExternalId: req.user.socialExternalId,
+        caption: buildCaption(post.title, post.description),
+        platforms,
+        overrides: post.overrides ?? {},
+        placements: post.placements,
+        kind: post.kind,
+        media: post.mediaFiles,
+        providerExternalId,
+        onProviderAccepted: (pfmPostId, pfmAccountPlatforms) =>
+          postStore.update(post.id, { pfmPostId, pfmAccountPlatforms }),
+        onManualDispatch: (platform, attemptedAt) =>
+          markManualDispatch(post.id, platform, attemptedAt),
+      });
+
+      postStore.updateResults(post.id, retried);
+      if (pfmPostId) postStore.update(post.id, { pfmPostId });
+    } catch (err) {
+      app.log.error({ err, postId: post.id }, "Retry outcome unconfirmed");
+      const current = postStore.findById(post.id);
+      if (current) {
+        postStore.updateResults(
+          post.id,
+          current.results
+            .filter(
+              (result) =>
+                result.pending &&
+                platforms.includes(result.platform as Platform)
+            )
+            .map((result) => ({
+              ...result,
+              error:
+                result.error ??
+                "BeamLoop could not confirm this delivery. It will not be sent again automatically.",
+            }))
+        );
+      }
+    }
+
     const updated = postStore.findById(post.id);
     return { post: updated ? publicPost(updated) : undefined, usage: null };
   });
@@ -634,12 +889,27 @@ export default async function uploadRoutes(app: FastifyInstance) {
     return reply.code(204).send();
   });
 
+  // Focused status lookup used by the live result screen. Provider refreshes
+  // remain throttled, while webhook-confirmed results return immediately.
+  app.get<{ Params: { id: string } }>("/uploads/:id", async (req, reply) => {
+    const post = postStore.findById(req.params.id);
+    if (!post || post.userId !== req.user.id) {
+      return reply.code(404).send({ error: "Post not found" });
+    }
+    await refreshPending(req.user.id, req.user.socialExternalId).catch((err) =>
+      app.log.warn({ err, postId: post.id }, "Provider status refresh failed")
+    );
+    const updated = postStore.findById(post.id);
+    return { post: updated ? publicPost(updated) : publicPost(post) };
+  });
+
   // History returns stored posts (media paths stripped — server-side only).
   // First refresh any still-"pending" async results so they resolve to
   // success/failure once the platforms finish publishing.
   app.get("/uploads/history", async (req) => {
-    await publishDueManualPosts(app).catch(() => {});
-    await refreshPending(req.user.id, req.user.socialExternalId).catch(() => {});
+    await refreshPending(req.user.id, req.user.socialExternalId).catch((err) =>
+      app.log.warn({ err }, "Provider status refresh failed")
+    );
     return {
       posts: postStore
         .listByUser(req.user.id)

@@ -71,7 +71,7 @@ export default function HistoryScreen() {
       // "Check later" can arrive before the upload request has created its
       // History record. Briefly refresh on focus so the new item appears
       // without requiring a manual pull-to-refresh.
-      const timers = [2_000, 5_000, 10_000, 20_000].map((delay) =>
+      const timers = [5_000, 15_000].map((delay) =>
         setTimeout(() => void load(), delay)
       );
       return () => timers.forEach(clearTimeout);
@@ -89,7 +89,7 @@ export default function HistoryScreen() {
     ) ?? false;
   useEffect(() => {
     if (!hasPending) return;
-    const timer = setInterval(() => void load(), 8_000);
+    const timer = setInterval(() => void load(), 20_000);
     return () => clearInterval(timer);
   }, [hasPending, load]);
 
@@ -521,7 +521,7 @@ function PostRow({
             </View>
           ))}
 
-          {hasFail && !isScheduled && (
+          {hasFail && !hasPending && !isScheduled && (
             retrying ? (
               <View style={[s.row, { justifyContent: "center", paddingVertical: 6 }]}>
                 <SpinArc size={16} color={palette.danger} />

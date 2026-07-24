@@ -27,6 +27,10 @@ export type Platform =
 export interface PlatformResult {
   success: boolean;
   pending?: boolean;
+  // Persisted immediately before a direct Discord/Telegram write. If the
+  // process exits or the network response is ambiguous, workers must not
+  // automatically send the same content again.
+  attemptedAt?: string;
   url?: string;
   post_id?: string;
   error?: string;

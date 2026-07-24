@@ -21,9 +21,14 @@ function read(path) {
   return readFileSync(path, "utf8");
 }
 
-for (const name of ["APP_JWT_SECRET", "POSTFORME_API_KEY", "CONNECT_REDIRECT_URL"]) {
+for (const name of [
+  "APP_JWT_SECRET",
+  "POSTFORME_API_KEY",
+  "POSTFORME_WEBHOOK_SECRET",
+  "CONNECT_REDIRECT_URL",
+]) {
   const value = process.env[name];
-  if (!value || /change-me|your-post-for-me-api-key/i.test(value)) {
+  if (!value || /change-me|your-post-for-me-api-key|replace-with/i.test(value)) {
     fail(`${name} is missing or still uses its example value.`);
   }
 }

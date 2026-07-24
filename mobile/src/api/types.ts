@@ -30,6 +30,9 @@ export interface PlatformResult {
   // Accepted by the provider but the platform result hasn't landed yet
   // (publishing is async; video can take a while). Not a failure.
   pending?: boolean;
+  // Present when a direct delivery has started. An unconfirmed delivery is
+  // deliberately not sent again automatically.
+  attemptedAt?: string;
   url?: string;
   post_id?: string;
   error?: string;

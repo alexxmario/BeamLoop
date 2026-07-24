@@ -144,6 +144,11 @@ export async function fetchHistory() {
   return res.posts;
 }
 
+export async function fetchPostStatus(postId: string) {
+  const res = await api<{ post: PostRecord }>(`/uploads/${postId}`);
+  return res.post;
+}
+
 export function connectDiscord(webhookUrl: string, name?: string) {
   return api<{ success: boolean; message: string }>("/connections/discord", {
     method: "POST",

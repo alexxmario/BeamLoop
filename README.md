@@ -52,8 +52,9 @@ development or preview build, not Expo Go.
   limits, Instagram destination, crop risk, and timing before upload.
 - Smart Channel Groups turn recurring destination combinations into a single
   tap; Launch Drop coordinates a future release across several channels.
-- History refreshes pending platform results while the screen is open and lets
-  users cancel future posts or retry failed destinations.
+- Post confirmations arrive through a verified provider webhook, with exact
+  provider-result and account-feed checks as fallbacks when processing stalls.
+  History lets users cancel future posts or retry only explicit failures.
 
 ## Backend API
 
@@ -70,8 +71,10 @@ development or preview build, not Expo Go.
 | DELETE | `/connections/:platform` | Disconnect one platform |
 | POST | `/uploads/video`, `/uploads/photos` | Publish selected media (`Idempotency-Key` supported) |
 | POST | `/uploads/:id/retry` | Retry failed destinations |
+| GET | `/uploads/:id` | Refresh one post's per-channel confirmation |
 | DELETE | `/uploads/:id` | Cancel a future scheduled post |
 | GET | `/uploads/history` | Post status and retry history |
+| POST | `/webhooks/post-for-me` | Verified provider result confirmations |
 
 ## Deployment
 

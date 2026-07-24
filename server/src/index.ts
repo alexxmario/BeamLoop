@@ -8,6 +8,7 @@ import authRoutes from "./routes/auth.js";
 import connectionRoutes from "./routes/connections.js";
 import uploadRoutes from "./routes/uploads.js";
 import legalRoutes from "./routes/legal.js";
+import webhookRoutes from "./routes/webhooks.js";
 import { PostForMeError } from "./lib/postForMe.js";
 
 // Railway terminates TLS and forwards the client address. Trusting that proxy
@@ -53,6 +54,7 @@ app.setErrorHandler((err, req, reply) => {
 app.get("/health", async () => ({ ok: true }));
 
 await app.register(legalRoutes);
+await app.register(webhookRoutes);
 await app.register(authRoutes);
 await app.register(connectionRoutes);
 await app.register(uploadRoutes);

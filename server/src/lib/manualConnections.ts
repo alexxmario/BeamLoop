@@ -19,6 +19,20 @@ export interface TelegramCredentials {
 }
 export type ManualPlatform = "discord" | "telegram";
 
+// A failed HTTP response is an explicit rejection and can be offered for a
+// user-initiated retry. A transport failure is ambiguous: the platform may
+// have accepted the write before the connection dropped, so it must never be
+// retried automatically.
+export class ManualDeliveryError extends Error {
+  constructor(
+    message: string,
+    public readonly outcome: "rejected" | "unknown"
+  ) {
+    super(message);
+    this.name = "ManualDeliveryError";
+  }
+}
+
 interface StoredRow {
   credentials: string;
   name: string | null;
@@ -134,9 +148,17 @@ export async function postToDiscord(
   for (const [i, f] of media.entries()) {
     form.append(`files[${i}]`, await openAsBlob(f.path, { type: f.mimetype }), f.filename);
   }
-  const res = await fetch(`${webhookUrl}?wait=true`, { method: "POST", body: form });
+  let res: Response;
+  try {
+    res = await fetch(`${webhookUrl}?wait=true`, { method: "POST", body: form });
+  } catch {
+    throw new ManualDeliveryError(
+      "Discord may have accepted this post, but BeamLoop could not confirm it. It will not be sent again automatically.",
+      "unknown"
+    );
+  }
   if (!res.ok) {
-    throw new Error(`Discord webhook failed (${res.status})`);
+    throw new ManualDeliveryError(`Discord webhook failed (${res.status})`, "rejected");
   }
 }
 
@@ -157,10 +179,21 @@ export async function postToTelegram(
     form.append("chat_id", chatId);
     if (withCaption && cap) form.append("caption", cap);
     form.append(fileField, await openAsBlob(file.path, { type: file.mimetype }), file.filename);
-    const res = await fetch(api(method), { method: "POST", body: form });
+    let res: Response;
+    try {
+      res = await fetch(api(method), { method: "POST", body: form });
+    } catch {
+      throw new ManualDeliveryError(
+        "Telegram may have accepted this post, but BeamLoop could not confirm it. It will not be sent again automatically.",
+        "unknown"
+      );
+    }
     const json = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
     if (!res.ok || !json.ok) {
-      throw new Error(`Telegram ${method} failed: ${json.description ?? res.status}`);
+      throw new ManualDeliveryError(
+        `Telegram ${method} failed: ${json.description ?? res.status}`,
+        "rejected"
+      );
     }
   }
 
@@ -194,10 +227,21 @@ export async function postToTelegram(
         file.filename
       );
     }
-    const res = await fetch(api("sendMediaGroup"), { method: "POST", body: form });
+    let res: Response;
+    try {
+      res = await fetch(api("sendMediaGroup"), { method: "POST", body: form });
+    } catch {
+      throw new ManualDeliveryError(
+        "Telegram may have accepted this album, but BeamLoop could not confirm it. It will not be sent again automatically.",
+        "unknown"
+      );
+    }
     const json = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
     if (!res.ok || !json.ok) {
-      throw new Error(`Telegram sendMediaGroup failed: ${json.description ?? res.status}`);
+      throw new ManualDeliveryError(
+        `Telegram sendMediaGroup failed: ${json.description ?? res.status}`,
+        "rejected"
+      );
     }
   }
 }

@@ -32,7 +32,7 @@ import Svg, {
 } from "react-native-svg";
 import {
   fetchConnections,
-  fetchHistory,
+  fetchPostStatus,
   uploadPhotos,
   uploadVideo,
   type PickedMedia,
@@ -351,12 +351,13 @@ export default function ComposeModal() {
   useEffect(() => {
     if (!pendingPostId) return;
     let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let nextDelay = 10_000;
 
     const refreshResult = async () => {
       try {
-        const history = await fetchHistory();
-        const fresh = history.find((post) => post.id === pendingPostId);
-        if (!active || !fresh) return;
+        const fresh = await fetchPostStatus(pendingPostId);
+        if (!active) return;
         setStep((current) =>
           current.name === "done" && current.post.id === pendingPostId
             ? { ...current, post: fresh }
@@ -368,10 +369,16 @@ export default function ComposeModal() {
     };
 
     void refreshResult();
-    const timer = setInterval(() => void refreshResult(), 5_000);
+    const poll = async () => {
+      await refreshResult();
+      if (!active) return;
+      nextDelay = Math.min(nextDelay * 2, 60_000);
+      timer = setTimeout(() => void poll(), nextDelay);
+    };
+    timer = setTimeout(() => void poll(), nextDelay);
     return () => {
       active = false;
-      clearInterval(timer);
+      if (timer) clearTimeout(timer);
     };
   }, [pendingPostId]);
 
