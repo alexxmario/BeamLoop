@@ -37,5 +37,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web"
   },
+  "overrides": {
+    "postcss": "8.5.12"
+  },
   "private": true
 }
