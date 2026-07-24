@@ -157,8 +157,29 @@ export default function ConnectionsScreen() {
     }
   };
 
+  const reconnectUnavailable = async (item: Connection) => {
+    setManaging(item.platform);
+    setError(null);
+    try {
+      // Remove the unusable provider record first so a fresh OAuth grant
+      // cannot be mistaken for the account that just failed.
+      await disconnectPlatform(item.platform);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't reset this connection");
+      setManaging(null);
+      return;
+    }
+    setManaging(null);
+    await openOAuth(item.platform);
+  };
+
   const onConnect = (item: Connection) => {
     if (isComingSoon(item.platform)) return; // not connectable yet
+    if (item.needsReconnect) {
+      void reconnectUnavailable(item);
+      return;
+    }
     if (item.platform === "discord") router.push("/connect/discord");
     else if (item.platform === "telegram") router.push("/connect/telegram");
     else openOAuth(item.platform);
@@ -240,19 +261,32 @@ export default function ConnectionsScreen() {
       <View style={{ paddingHorizontal: spacing.xxl, paddingTop: 14, paddingBottom: 18 }}>
         <View style={[s.row, { justifyContent: "space-between" }]}>
           <Text style={{ ...type.displayTitle, color: palette.text }}>
-            Connect accounts
+            Accounts
           </Text>
-          <Pressable onPress={signOut} hitSlop={8}>
-            <Text
-              style={{
-                ...type.monoMeta,
-                color: palette.textLabel,
-                letterSpacing: tracking(monoTracking.wide, type.monoMeta.fontSize),
-              }}
-            >
-              SIGN OUT
-            </Text>
-          </Pressable>
+          <View style={[s.row, { gap: spacing.lg }]}>
+            <Pressable onPress={() => router.push("/library")} hitSlop={8}>
+              <Text
+                style={{
+                  ...type.monoMeta,
+                  color: palette.signal,
+                  letterSpacing: tracking(monoTracking.wide, type.monoMeta.fontSize),
+                }}
+              >
+                LIBRARY
+              </Text>
+            </Pressable>
+            <Pressable onPress={signOut} hitSlop={8}>
+              <Text
+                style={{
+                  ...type.monoMeta,
+                  color: palette.textLabel,
+                  letterSpacing: tracking(monoTracking.wide, type.monoMeta.fontSize),
+                }}
+              >
+                SIGN OUT
+              </Text>
+            </Pressable>
+          </View>
         </View>
         <View style={[s.row, { gap: spacing.md, marginTop: spacing.lg }]}>
           <View
@@ -409,7 +443,7 @@ function ConnectionRow({
           gap: spacing.rowPad,
           backgroundColor: palette.strip,
           borderWidth: 1,
-          borderColor: palette.borderFaint,
+          borderColor: item.needsReconnect ? palette.dangerBorder : palette.borderFaint,
           borderRadius: radius.card,
           paddingVertical: spacing.rowPad,
           paddingHorizontal: spacing.lg,
@@ -429,6 +463,8 @@ function ConnectionRow({
         >
           {soon
             ? "Coming soon"
+            : item.needsReconnect
+              ? item.statusMessage ?? "Account unavailable"
             : item.connected
               ? handle ?? "Connected"
               : item.connectVia === "manual"
@@ -459,6 +495,24 @@ function ConnectionRow({
             SOON
           </Text>
         </View>
+      ) : item.needsReconnect ? (
+        <Pressable
+          onPress={onConnect}
+          disabled={managing || opening}
+          style={{
+            minHeight: sizes.btnSm,
+            paddingHorizontal: 12,
+            borderRadius: radius.tile,
+            borderWidth: 1.5,
+            borderColor: palette.warning,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ ...type.monoMeta, color: palette.warning }}>
+            {managing ? "RESETTING…" : opening ? "OPENING…" : "RECONNECT"}
+          </Text>
+        </Pressable>
       ) : item.connected ? (
         <Pressable onPress={onManage} disabled={managing} style={[s.row, { gap: 7, paddingVertical: 6 }]}>
           <View

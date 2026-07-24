@@ -1,15 +1,16 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
-import { createWriteStream, openAsBlob, promises as fsp } from "node:fs";
+import { createReadStream, createWriteStream, openAsBlob, promises as fsp } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { z } from "zod";
 import { postStore, type PostRecord, type StoredMedia } from "../lib/posts.js";
-import { MEDIA_DIR } from "../lib/paths.js";
+import { MEDIA_DIR, THUMBNAIL_DIR } from "../lib/paths.js";
 import {
   OAUTH_PLATFORMS,
   MANUAL_PLATFORMS,
+  isReconnectError,
   type Platform,
   type PlatformResult,
 } from "../lib/platforms.js";
@@ -144,13 +145,22 @@ function publicPost(post: PostRecord) {
   const {
     userId: _userId,
     mediaFiles: _mediaFiles,
+    thumbnailFile: _thumbnailFile,
     idempotencyKey: _idempotencyKey,
     pfmPostId: _pfmPostId,
     pfmExternalId: _pfmExternalId,
     pfmAccountPlatforms: _pfmAccountPlatforms,
     ...safe
   } = post;
-  return safe;
+  return {
+    ...safe,
+    hasThumbnail: Boolean(post.thumbnailFile),
+    results: safe.results.map((result) =>
+      !result.success && !result.pending && isReconnectError(result.error)
+        ? { ...result, connectionIssue: "reconnect" as const }
+        : result
+    ),
+  };
 }
 
 // Poll for per-account results until every expected account has one (or we
@@ -560,6 +570,24 @@ async function persistMedia(postId: string, files: MediaFile[]): Promise<StoredM
   return stored;
 }
 
+async function persistThumbnail(postId: string, file: MediaFile): Promise<StoredMedia> {
+  const dir = join(THUMBNAIL_DIR, postId);
+  await fsp.mkdir(dir, { recursive: true });
+  const extension =
+    file.mimetype.toLowerCase() === "image/png"
+      ? "png"
+      : file.mimetype.toLowerCase() === "image/webp"
+        ? "webp"
+        : "jpg";
+  const dest = join(dir, `preview.${extension}`);
+  await fsp.copyFile(file.path, dest);
+  return {
+    path: dest,
+    filename: `preview.${extension}`,
+    mimetype: file.mimetype,
+  };
+}
+
 async function cleanup(files: Record<string, MediaFile[]>) {
   for (const list of Object.values(files)) {
     for (const f of list) {
@@ -650,6 +678,18 @@ export default async function uploadRoutes(app: FastifyInstance) {
         }
         const mediaError = validateMedia(kind, media);
         if (mediaError) return reply.code(400).send({ error: mediaError });
+        const thumbnails = files.thumbnail ?? [];
+        if (thumbnails.length > 1) {
+          return reply.code(400).send({ error: "Upload exactly one thumbnail" });
+        }
+        const thumbnail = thumbnails[0];
+        if (
+          thumbnail &&
+          (thumbnail.truncated ||
+            !PHOTO_TYPES.has(thumbnail.mimetype.toLowerCase()))
+        ) {
+          return reply.code(400).send({ error: "Use a JPEG, PNG, or WebP thumbnail" });
+        }
 
         const { title, description, platforms } = parsed.data;
         const overrides = parseOverrides(fields);
@@ -701,15 +741,23 @@ export default async function uploadRoutes(app: FastifyInstance) {
           pfmExternalId: hasOauthPlatform ? postId : undefined,
         });
         let mediaFiles: StoredMedia[];
+        let thumbnailFile: StoredMedia | undefined;
         try {
           mediaFiles = await persistMedia(post.id, media);
+          if (thumbnail) {
+            thumbnailFile = await persistThumbnail(post.id, thumbnail);
+          }
         } catch (error) {
           // No platform write has started yet, so removing this reservation is
           // safe and lets the same idempotency key be tried again.
           postStore.delete(post.id);
+          await Promise.all([
+            fsp.rm(join(MEDIA_DIR, post.id), { recursive: true, force: true }),
+            fsp.rm(join(THUMBNAIL_DIR, post.id), { recursive: true, force: true }),
+          ]);
           throw error;
         }
-        postStore.update(post.id, { mediaFiles });
+        postStore.update(post.id, { mediaFiles, thumbnailFile });
 
         try {
           const { results, pfmPostId } = await publish({
@@ -786,7 +834,12 @@ export default async function uploadRoutes(app: FastifyInstance) {
     // Never retry a merely-unconfirmed platform: it may already be live and a
     // retry could create a duplicate. Only explicit provider failures qualify.
     const failed = post.results
-      .filter((r) => !r.success && !r.pending)
+      .filter(
+        (r) =>
+          !r.success &&
+          !r.pending &&
+          !isReconnectError(r.error)
+      )
       .map((r) => r.platform);
     const platforms = [
       ...new Set((body.data.platforms ?? failed) as Platform[]),
@@ -882,11 +935,39 @@ export default async function uploadRoutes(app: FastifyInstance) {
     }
     if (post.pfmPostId) await postForMe.deletePost(post.pfmPostId);
     postStore.delete(post.id);
-    const directory = post.mediaFiles?.[0]
-      ? join(post.mediaFiles[0].path, "..")
+    const mediaDirectory = post.mediaFiles?.[0]
+      ? dirname(post.mediaFiles[0].path)
       : join(MEDIA_DIR, post.id);
-    await fsp.rm(directory, { recursive: true, force: true });
+    const thumbnailDirectory = post.thumbnailFile
+      ? dirname(post.thumbnailFile.path)
+      : join(THUMBNAIL_DIR, post.id);
+    await Promise.all([
+      fsp.rm(mediaDirectory, { recursive: true, force: true }),
+      fsp.rm(thumbnailDirectory, { recursive: true, force: true }),
+    ]);
     return reply.code(204).send();
+  });
+
+  // History previews stay private: the mobile Image request carries the same
+  // bearer token as every other BeamLoop API call.
+  app.get<{ Params: { id: string } }>("/uploads/:id/thumbnail", async (req, reply) => {
+    const post = postStore.findById(req.params.id);
+    if (!post || post.userId !== req.user.id) {
+      return reply.code(404).send({ error: "Post not found" });
+    }
+    const thumbnail = post.thumbnailFile;
+    if (!thumbnail) {
+      return reply.code(404).send({ error: "Thumbnail not found" });
+    }
+    try {
+      await fsp.access(thumbnail.path);
+    } catch {
+      return reply.code(404).send({ error: "Thumbnail not found" });
+    }
+    return reply
+      .type(thumbnail.mimetype)
+      .header("Cache-Control", "private, max-age=86400")
+      .send(createReadStream(thumbnail.path));
   });
 
   // Focused status lookup used by the live result screen. Provider refreshes

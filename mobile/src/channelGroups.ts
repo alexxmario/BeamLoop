@@ -7,6 +7,7 @@ export interface ChannelGroup {
   name: string;
   platforms: Platform[];
   createdAt: string;
+  updatedAt?: string;
 }
 
 const store = new File(Paths.document, "beamloop-channel-groups.json");
@@ -65,6 +66,40 @@ export function saveChannelGroup(
 
 export function deleteChannelGroup(userId: string, id: string) {
   writeAll(readAll().filter((group) => group.userId !== userId || group.id !== id));
+}
+
+export function updateChannelGroup(
+  userId: string,
+  id: string,
+  name: string,
+  platforms: Platform[]
+): ChannelGroup {
+  const cleanName = name.trim().slice(0, 28);
+  const uniquePlatforms = [...new Set(platforms)];
+  if (!cleanName) throw new Error("Give this collection a name");
+  if (uniquePlatforms.length === 0) throw new Error("Select at least one channel");
+  const all = readAll();
+  const current = all.find((group) => group.userId === userId && group.id === id);
+  if (!current) throw new Error("That collection no longer exists");
+  const duplicate = all.some(
+    (group) =>
+      group.userId === userId &&
+      group.id !== id &&
+      group.name.toLocaleLowerCase() === cleanName.toLocaleLowerCase()
+  );
+  if (duplicate) throw new Error("A collection with that name already exists");
+  const updated = {
+    ...current,
+    name: cleanName,
+    platforms: uniquePlatforms,
+    updatedAt: new Date().toISOString(),
+  };
+  writeAll(
+    all.map((group) =>
+      group.userId === userId && group.id === id ? updated : group
+    )
+  );
+  return updated;
 }
 
 export function clearChannelGroups(userId: string) {

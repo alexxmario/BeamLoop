@@ -6,7 +6,13 @@ import {
   validateDiscordWebhook,
   validateTelegramCredentials,
 } from "../lib/manualConnections.js";
-import { OAUTH_PLATFORMS, MANUAL_PLATFORMS, type Platform } from "../lib/platforms.js";
+import { postStore } from "../lib/posts.js";
+import {
+  OAUTH_PLATFORMS,
+  MANUAL_PLATFORMS,
+  isReconnectError,
+  type Platform,
+} from "../lib/platforms.js";
 
 const linkSchema = z.object({
   platforms: z.array(z.enum([...OAUTH_PLATFORMS, ...MANUAL_PLATFORMS])).optional(),
@@ -41,12 +47,39 @@ export default async function connectionRoutes(app: FastifyInstance) {
     const byPlatform = new Map(
       accounts.filter((a) => a.status === "connected").map((a) => [a.platform, a])
     );
+    const latestResultByPlatform = new Map<
+      string,
+      { success: boolean; pending?: boolean; error?: string; accountId?: string }
+    >();
+    for (const post of postStore.listByUser(req.user.id)) {
+      for (const result of post.results) {
+        if (!latestResultByPlatform.has(result.platform)) {
+          const accountId = Object.entries(post.pfmAccountPlatforms ?? {}).find(
+            ([, platform]) => platform === result.platform
+          )?.[0];
+          latestResultByPlatform.set(result.platform, { ...result, accountId });
+        }
+      }
+    }
 
     const oauth = OAUTH_PLATFORMS.map((platform) => {
       const acc = byPlatform.get(platform);
+      const latest = latestResultByPlatform.get(platform);
+      const needsReconnect = Boolean(
+        acc &&
+          latest &&
+          !latest.success &&
+          !latest.pending &&
+          (!latest.accountId || latest.accountId === acc.id) &&
+          isReconnectError(latest.error)
+      );
       return {
         platform,
-        connected: Boolean(acc),
+        connected: Boolean(acc) && !needsReconnect,
+        needsReconnect,
+        statusMessage: needsReconnect
+          ? "This account is unavailable. Remove or reconnect it."
+          : undefined,
         details: acc
           ? { username: acc.username ?? undefined, social_images: acc.profile_photo_url ?? undefined }
           : null,

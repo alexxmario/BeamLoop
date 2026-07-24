@@ -32,6 +32,8 @@ export interface PostRecord {
   launchDrop?: boolean;
   // Media kept on disk so failed platforms can be retried (Phase 4).
   mediaFiles?: StoredMedia[];
+  // A small, private preview retained for History after retry media expires.
+  thumbnailFile?: StoredMedia;
   // Per-platform caption overrides (sent as `<platform>_title`).
   overrides?: Record<string, string>;
   // Instagram/Facebook destination selected in the composer.

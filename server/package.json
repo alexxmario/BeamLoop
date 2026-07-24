@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test:provider-contract": "node scripts/provider-contract-check.mjs",
     "test:webhook-contract": "node scripts/webhook-contract-check.mjs",
+    "test:history-contract": "node scripts/history-contract-check.mjs",
     "release:check": "node scripts/release-check.mjs"
   },
   "dependencies": {

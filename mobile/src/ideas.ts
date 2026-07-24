@@ -5,6 +5,7 @@ export interface ContentIdea {
   userId: string;
   text: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 const store = new File(Paths.document, "beamloop-ideas.json");
@@ -48,6 +49,21 @@ export function saveIdea(userId: string, text: string): ContentIdea {
 
 export function deleteIdea(userId: string, id: string) {
   writeAll(readAll().filter((idea) => idea.userId !== userId || idea.id !== id));
+}
+
+export function updateIdea(userId: string, id: string, text: string): ContentIdea {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("Write something before saving an idea");
+  const all = readAll();
+  const current = all.find((idea) => idea.userId === userId && idea.id === id);
+  if (!current) throw new Error("That idea no longer exists");
+  const updated = { ...current, text: trimmed, updatedAt: new Date().toISOString() };
+  writeAll(
+    all.map((idea) =>
+      idea.userId === userId && idea.id === id ? updated : idea
+    )
+  );
+  return updated;
 }
 
 export function clearIdeas(userId: string) {

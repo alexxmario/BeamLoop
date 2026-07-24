@@ -1,9 +1,10 @@
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   Linking,
   Pressable,
   RefreshControl,
@@ -12,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { cancelScheduledPost, fetchHistory, retryPost } from "../../src/api/beamloop";
+import { API_BASE_URL, tokenStorage } from "../../src/api/client";
 import {
   PLATFORM_LABELS,
   type Platform,
@@ -47,6 +49,7 @@ const monthDay = (iso: string) =>
     .replace(",", " ·");
 
 export default function HistoryScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [posts, setPosts] = useState<PostRecord[] | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -55,6 +58,7 @@ export default function HistoryScreen() {
   const [canceling, setCanceling] = useState<string | null>(null);
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -68,6 +72,7 @@ export default function HistoryScreen() {
   useFocusEffect(
     useCallback(() => {
       void load();
+      void tokenStorage.get().then(setAuthToken);
       // "Check later" can arrive before the upload request has created its
       // History record. Briefly refresh on focus so the new item appears
       // without requiring a manual pull-to-refresh.
@@ -182,7 +187,12 @@ export default function HistoryScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.console }} edges={["top"]}>
       <View style={{ paddingHorizontal: spacing.xxl, paddingTop: 10, paddingBottom: spacing.md }}>
-        <Text style={{ ...type.displayTitle, color: palette.text }}>History</Text>
+        <View style={[s.row, { justifyContent: "space-between" }]}>
+          <Text style={{ ...type.displayTitle, color: palette.text }}>History</Text>
+          <Pressable onPress={() => router.push("/library")} hitSlop={8}>
+            <Text style={{ ...type.monoMeta, color: palette.signal }}>LIBRARY ›</Text>
+          </Pressable>
+        </View>
         <View style={[s.row, { gap: spacing.sm, marginTop: spacing.rowPad, flexWrap: "wrap" }]}> 
           <FilterChip
             label="All"
@@ -259,6 +269,8 @@ export default function HistoryScreen() {
             }
             onRetry={() => retry(item)}
             onCancel={() => cancel(item)}
+            authToken={authToken}
+            onFixConnection={() => router.navigate("/(tabs)/connections")}
           />
         )}
       />
@@ -327,6 +339,8 @@ function PostRow({
   onToggle,
   onRetry,
   onCancel,
+  authToken,
+  onFixConnection,
 }: {
   post: PostRecord;
   retrying: boolean;
@@ -335,8 +349,12 @@ function PostRow({
   onToggle: () => void;
   onRetry: () => void;
   onCancel: () => void;
+  authToken: string | null;
+  onFixConnection: () => void;
 }) {
   const failed = post.results.filter((r) => !r.success && !r.pending);
+  const retryableFailed = failed.filter((r) => r.connectionIssue !== "reconnect");
+  const reconnectFailed = failed.filter((r) => r.connectionIssue === "reconnect");
   const hasFail = failed.length > 0;
   const pendingCount = post.results.filter((r) => r.pending).length;
   const hasPending = pendingCount > 0;
@@ -344,7 +362,6 @@ function PostRow({
     post.scheduledAt && new Date(post.scheduledAt).getTime() > Date.now()
   );
   const firstHue = platformHue[post.platforms[0] as Platform] ?? palette.signal;
-  const failedLabels = failed.map((r) => PLATFORM_LABELS[r.platform]).join(", ");
   const okCount = post.results.filter((r) => r.success).length;
 
   return (
@@ -363,20 +380,11 @@ function PostRow({
         accessibilityLabel={`${expanded ? "Hide" : "Show"} details for ${post.title}`}
         style={{ flexDirection: "row", gap: spacing.rowPad, padding: spacing.rowPad }}
       >
-        {/* striped thumb with hue spine */}
-        <View
-          style={{
-            width: 64,
-            height: 64,
-            borderRadius: radius.input,
-            overflow: "hidden",
-            borderLeftWidth: 3,
-            borderLeftColor: firstHue,
-            flexShrink: 0,
-          }}
-        >
-          <Stripes spacing={14} style={{ flex: 1 }} />
-        </View>
+        <PostThumbnail
+          post={post}
+          authToken={authToken}
+          accent={firstHue}
+        />
 
         <View style={{ flex: 1, minWidth: 0, justifyContent: "space-between" }}>
           <View>
@@ -494,7 +502,13 @@ function PostRow({
                         : palette.danger,
                   }}
                 >
-                  {result.success ? "LIVE" : result.pending ? "CONFIRMING" : "FAILED"}
+                  {result.success
+                    ? "LIVE"
+                    : result.pending
+                      ? "CONFIRMING"
+                      : result.connectionIssue === "reconnect"
+                        ? "RECONNECT"
+                        : "FAILED"}
                 </Text>
               </View>
               {result.pending && (
@@ -502,9 +516,14 @@ function PostRow({
                   The platform may already be live; BeamLoop is waiting for its final result.
                 </Text>
               )}
-              {result.error && (
+              {result.error && result.connectionIssue !== "reconnect" && (
                 <Text style={{ ...type.bodyXs, color: palette.danger }}>
                   {result.error}
+                </Text>
+              )}
+              {result.connectionIssue === "reconnect" && (
+                <Text style={{ ...type.bodyXs, color: palette.danger }}>
+                  This account is no longer available. Reconnect it before posting here again.
                 </Text>
               )}
               {result.url && (
@@ -521,7 +540,25 @@ function PostRow({
             </View>
           ))}
 
-          {hasFail && !hasPending && !isScheduled && (
+          {reconnectFailed.length > 0 && (
+            <Pressable
+              onPress={onFixConnection}
+              style={{
+                alignSelf: "flex-start",
+                paddingVertical: 7,
+                paddingHorizontal: 12,
+                borderRadius: radius.pill,
+                borderWidth: 1,
+                borderColor: palette.warning,
+              }}
+            >
+              <Text style={{ ...type.monoMeta, color: palette.warning }}>
+                FIX CONNECTION ›
+              </Text>
+            </Pressable>
+          )}
+
+          {retryableFailed.length > 0 && !hasPending && !isScheduled && (
             retrying ? (
               <View style={[s.row, { justifyContent: "center", paddingVertical: 6 }]}>
                 <SpinArc size={16} color={palette.danger} />
@@ -539,7 +576,9 @@ function PostRow({
                 }}
               >
                 <Text style={{ ...type.monoMeta, color: palette.danger }}>
-                  Retry {failed.length === 1 ? failedLabels : `${failed.length} platforms`} ›
+                  Retry {retryableFailed.length === 1
+                    ? PLATFORM_LABELS[retryableFailed[0]!.platform]
+                    : `${retryableFailed.length} platforms`} ›
                 </Text>
               </Pressable>
             )
@@ -573,6 +612,65 @@ function PostRow({
         </View>
       )}
 
+    </View>
+  );
+}
+
+function PostThumbnail({
+  post,
+  authToken,
+  accent,
+}: {
+  post: PostRecord;
+  authToken: string | null;
+  accent: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const showImage = post.hasThumbnail && authToken && !failed;
+
+  return (
+    <View
+      style={{
+        width: 64,
+        height: 64,
+        borderRadius: radius.input,
+        overflow: "hidden",
+        borderLeftWidth: 3,
+        borderLeftColor: accent,
+        flexShrink: 0,
+        backgroundColor: palette.console,
+      }}
+    >
+      {showImage ? (
+        <Image
+          source={{
+            uri: `${API_BASE_URL}/uploads/${post.id}/thumbnail`,
+            headers: { Authorization: `Bearer ${authToken}` },
+          }}
+          resizeMode="cover"
+          onError={() => setFailed(true)}
+          style={{ width: "100%", height: "100%" }}
+        />
+      ) : (
+        <Stripes spacing={14} style={{ flex: 1 }} />
+      )}
+      {post.kind === "video" && (
+        <View
+          style={{
+            position: "absolute",
+            right: 5,
+            bottom: 5,
+            width: 19,
+            height: 19,
+            borderRadius: 10,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: palette.badgeScrim,
+          }}
+        >
+          <Text style={{ color: palette.text, fontSize: 9, marginLeft: 1 }}>▶</Text>
+        </View>
+      )}
     </View>
   );
 }

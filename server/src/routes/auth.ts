@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { userStore, verifyPassword } from "../lib/store.js";
 import { postStore } from "../lib/posts.js";
-import { MEDIA_DIR } from "../lib/paths.js";
+import { MEDIA_DIR, THUMBNAIL_DIR } from "../lib/paths.js";
 import { signSessionToken } from "../plugins/auth.js";
 import { postForMe } from "../lib/postForMe.js";
 import { manualStore } from "../lib/manualConnections.js";
@@ -108,13 +108,18 @@ export default async function authRoutes(app: FastifyInstance) {
       // Remove post history and any media directories kept for retries.
       const removedPosts = postStore.deleteByUser(userId);
       for (const post of removedPosts) {
-        const dir = post.mediaFiles?.[0]
+        const mediaDir = post.mediaFiles?.[0]
           ? dirname(post.mediaFiles[0].path)
           : join(MEDIA_DIR, post.id);
-        try {
-          rmSync(dir, { recursive: true, force: true });
-        } catch (err) {
-          req.log.warn({ err, dir }, "Failed to remove media directory");
+        const thumbnailDir = post.thumbnailFile
+          ? dirname(post.thumbnailFile.path)
+          : join(THUMBNAIL_DIR, post.id);
+        for (const dir of [mediaDir, thumbnailDir]) {
+          try {
+            rmSync(dir, { recursive: true, force: true });
+          } catch (err) {
+            req.log.warn({ err, dir }, "Failed to remove post media directory");
+          }
         }
       }
 

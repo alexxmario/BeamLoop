@@ -16,7 +16,7 @@ import { AuthProvider, useAuth } from "../src/auth/AuthContext";
 import { palette } from "../src/theme";
 
 // Screen groups that require a signed-in user.
-const PROTECTED_GROUPS = ["(tabs)", "compose", "connect", "connections"];
+const PROTECTED_GROUPS = ["(tabs)", "compose", "connect", "connections", "library"];
 
 // Reactively keep navigation in sync with auth state: if the session goes away
 // (sign out, account deletion, or an expired token) while the user is on a
@@ -79,6 +79,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="library" options={{ headerShown: false }} />
         <Stack.Screen
           name="compose"
           options={{ headerShown: false, presentation: "fullScreenModal" }}

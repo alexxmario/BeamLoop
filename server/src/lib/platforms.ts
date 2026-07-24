@@ -34,4 +34,28 @@ export interface PlatformResult {
   url?: string;
   post_id?: string;
   error?: string;
+  // The destination still exists in the provider account list, but the most
+  // recent publish proved its authorization/account is no longer usable.
+  connectionIssue?: "reconnect";
+}
+
+export function isReconnectError(error?: string): boolean {
+  if (!error) return false;
+  const value = error.toLocaleLowerCase();
+  return [
+    "account not connected",
+    "error validating access token",
+    "invalid access token",
+    "expired access token",
+    "access token has expired",
+    "cannot access the app till you log in",
+    "please log in",
+    "account has been deleted",
+    "account was deleted",
+    "account is disabled",
+    "account has been disabled",
+    "account is deactivated",
+    "account has been deactivated",
+    "authorization has been revoked",
+  ].some((phrase) => value.includes(phrase));
 }

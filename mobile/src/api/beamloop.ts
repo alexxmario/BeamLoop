@@ -108,23 +108,27 @@ function baseUploadForm({
 export function uploadVideo(
   video: PickedMedia,
   options: UploadOptions,
-  idempotencyKey: string
+  idempotencyKey: string,
+  thumbnail?: PickedMedia
 ) {
   const form = baseUploadForm(options);
   // React Native FormData takes { uri, name, type } for files.
   form.append("video", video as unknown as Blob);
+  if (thumbnail) form.append("thumbnail", thumbnail as unknown as Blob);
   return apiUpload<UploadResult>("/uploads/video", form, { "Idempotency-Key": idempotencyKey });
 }
 
 export function uploadPhotos(
   photos: PickedMedia[],
   options: UploadOptions,
-  idempotencyKey: string
+  idempotencyKey: string,
+  thumbnail?: PickedMedia
 ) {
   const form = baseUploadForm(options);
   for (const photo of photos) {
     form.append("photos[]", photo as unknown as Blob);
   }
+  if (thumbnail) form.append("thumbnail", thumbnail as unknown as Blob);
   return apiUpload<UploadResult>("/uploads/photos", form, { "Idempotency-Key": idempotencyKey });
 }
 

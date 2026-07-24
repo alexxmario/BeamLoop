@@ -11,6 +11,8 @@ export type Platform =
 export interface Connection {
   platform: Platform;
   connected: boolean;
+  needsReconnect?: boolean;
+  statusMessage?: string;
   details: {
     display_name?: string;
     username?: string;
@@ -36,6 +38,7 @@ export interface PlatformResult {
   url?: string;
   post_id?: string;
   error?: string;
+  connectionIssue?: "reconnect";
 }
 
 export interface PostRecord {
@@ -48,6 +51,7 @@ export interface PostRecord {
   createdAt: string;
   scheduledAt?: string;
   launchDrop?: boolean;
+  hasThumbnail?: boolean;
 }
 
 export type PostPlacement = "timeline" | "reels" | "stories";

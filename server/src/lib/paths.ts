@@ -7,3 +7,6 @@ import { join } from "node:path";
  */
 export const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), "data");
 export const MEDIA_DIR = join(DATA_DIR, "media");
+// Small previews outlive full retry media so History stays visual without
+// retaining a user's original upload indefinitely.
+export const THUMBNAIL_DIR = join(DATA_DIR, "thumbnails");

@@ -31,9 +31,10 @@ await app.register(rateLimit, {
 await app.register(multipart, {
   limits: {
     fileSize: 500 * 1024 * 1024,
-    files: 10,
+    // Up to ten photos plus one small History thumbnail.
+    files: 11,
     fields: 30,
-    parts: 40,
+    parts: 41,
   },
 });
 await app.register(authPlugin);

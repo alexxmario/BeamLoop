@@ -1,7 +1,8 @@
 import * as ImagePicker from "expo-image-picker";
+import * as VideoThumbnails from "expo-video-thumbnails";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -300,8 +301,37 @@ async function assetToJpegMedia(
   };
 }
 
+async function makeHistoryThumbnail(media: Media): Promise<PickedMedia> {
+  const first = media.items[0]!;
+  const sourceUri =
+    media.kind === "video"
+      ? (
+          await VideoThumbnails.getThumbnailAsync(first.uri, {
+            time: Math.min(1_000, Math.max((first.durationMs ?? 2_000) - 100, 0)),
+            quality: 0.8,
+          })
+        ).uri
+      : first.uri;
+  const out = await manipulateAsync(
+    sourceUri,
+    [{ resize: { width: Math.min(first.width ?? 480, 480) } }],
+    { compress: 0.76, format: SaveFormat.JPEG }
+  );
+  return {
+    uri: out.uri,
+    name: "beamloop-preview.jpg",
+    type: "image/jpeg",
+    width: out.width,
+    height: out.height,
+  };
+}
+
 export default function ComposeModal() {
   const router = useRouter();
+  const routeParams = useLocalSearchParams<{
+    idea?: string | string[];
+    platforms?: string | string[];
+  }>();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -322,6 +352,18 @@ export default function ComposeModal() {
   // Keep this key if the network drops so a manual retry cannot publish twice.
   const [idempotencyKey, setIdempotencyKey] = useState(createIdempotencyKey);
   const checkingLater = useRef(false);
+  const ideaParamApplied = useRef(false);
+  const collectionParamApplied = useRef(false);
+
+  useEffect(() => {
+    if (ideaParamApplied.current) return;
+    const idea = Array.isArray(routeParams.idea)
+      ? routeParams.idea[0]
+      : routeParams.idea;
+    if (!idea?.trim()) return;
+    ideaParamApplied.current = true;
+    setCaption(idea);
+  }, [routeParams.idea]);
 
   const refreshIdeas = useCallback(() => {
     if (user) setIdeas(listIdeas(user.id));
@@ -396,6 +438,20 @@ export default function ComposeModal() {
           : null
     );
   };
+
+  useEffect(() => {
+    if (collectionParamApplied.current || connections.length === 0) return;
+    const raw = Array.isArray(routeParams.platforms)
+      ? routeParams.platforms[0]
+      : routeParams.platforms;
+    if (!raw) return;
+    const requested = raw
+      .split(",")
+      .filter((platform): platform is Platform => platform in PLATFORM_LABELS);
+    if (requested.length === 0) return;
+    collectionParamApplied.current = true;
+    applyChannelGroup(requested);
+  }, [connections, routeParams.platforms]);
 
   const saveCurrentIdea = () => {
     if (!user || !caption.trim()) {
@@ -488,6 +544,7 @@ export default function ComposeModal() {
     setError(null);
     const started = Date.now();
     try {
+      const thumbnail = await makeHistoryThumbnail(media);
       const options = {
         title: caption.trim(),
         platforms: [...selected],
@@ -498,8 +555,8 @@ export default function ComposeModal() {
       };
       const { post } =
         media.kind === "video"
-          ? await uploadVideo(media.items[0]!, options, idempotencyKey)
-          : await uploadPhotos(media.items, options, idempotencyKey);
+          ? await uploadVideo(media.items[0]!, options, idempotencyKey, thumbnail)
+          : await uploadPhotos(media.items, options, idempotencyKey, thumbnail);
       if (!checkingLater.current) {
         setStep({ name: "done", post, elapsedMs: Date.now() - started });
       }
