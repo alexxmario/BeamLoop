@@ -42,7 +42,7 @@ const ALL_PRODUCT_IDS = Object.values(PRODUCTS).flatMap(Object.values);
 
 const FEATURES: Record<Exclude<PlanId, "free">, string[]> = {
   creator: [
-    "4 connected channels",
+    "3 connected channels",
     "100 posts each month",
     "50 scheduled posts",
     "Per-platform captions and placements",

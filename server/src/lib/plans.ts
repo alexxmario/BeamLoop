@@ -32,7 +32,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     launchDrops: false,
   },
   creator: {
-    channels: 4,
+    channels: 3,
     postsPerMonth: 100,
     scheduledPosts: 50,
     ideas: null,
