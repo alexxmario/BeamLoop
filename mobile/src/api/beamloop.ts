@@ -184,3 +184,13 @@ export function unregisterPushToken(token: string) {
     body: { token },
   });
 }
+
+// Always resolves with the same message whether or not the address has an
+// account — the server refuses to confirm which, and so does the UI.
+export function requestPasswordReset(email: string) {
+  return api<{ message: string }>("/auth/forgot-password", {
+    method: "POST",
+    body: { email },
+    auth: false,
+  });
+}

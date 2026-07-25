@@ -10,6 +10,9 @@ export interface AppUser {
   id: string;
   email: string;
   passwordHash: string; // format: <saltHex>:<scryptHex>
+  // When the password last changed. Sessions minted before this are refused,
+  // so a reset actually ejects whoever was signed in.
+  passwordChangedAt?: string;
   // Kept separate from the login ID so an account can safely recover social
   // connections created in an earlier BeamLoop environment.
   socialExternalId: string;
@@ -21,6 +24,7 @@ interface UserRow {
   email: string;
   passwordHash: string;
   socialExternalId: string | null;
+  passwordChangedAt: string | null;
   createdAt: string;
 }
 
@@ -30,6 +34,7 @@ function rowToUser(row: UserRow): AppUser {
     email: row.email,
     passwordHash: row.passwordHash,
     socialExternalId: row.socialExternalId ?? row.id,
+    ...(row.passwordChangedAt ? { passwordChangedAt: row.passwordChangedAt } : {}),
     createdAt: row.createdAt,
   };
 }
@@ -44,7 +49,11 @@ export function verifyPassword(password: string, stored: string): boolean {
   const [saltHex, hashHex] = stored.split(":");
   if (!saltHex || !hashHex) return false;
   const hash = scryptSync(password, Buffer.from(saltHex, "hex"), 64);
-  return timingSafeEqual(hash, Buffer.from(hashHex, "hex"));
+  const stored_ = Buffer.from(hashHex, "hex");
+  // timingSafeEqual throws on a length mismatch; a malformed row is just a
+  // failed comparison, not a crash.
+  if (hash.length !== stored_.length) return false;
+  return timingSafeEqual(hash, stored_);
 }
 
 export const userStore = {
@@ -76,6 +85,12 @@ export const userStore = {
        VALUES (?, ?, ?, ?, ?)`
     ).run(user.id, user.email, user.passwordHash, user.socialExternalId, user.createdAt);
     return user;
+  },
+
+  setPassword(id: string, password: string) {
+    db.prepare(
+      "UPDATE users SET passwordHash = ?, passwordChangedAt = ? WHERE id = ?"
+    ).run(hashPassword(password), new Date().toISOString(), id);
   },
 
   delete(id: string) {

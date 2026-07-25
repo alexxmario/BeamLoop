@@ -34,6 +34,22 @@ export default fp(async function authPlugin(app: FastifyInstance) {
         if (!user) {
           return reply.code(401).send({ error: "Unknown user" });
         }
+        // A password reset must eject existing sessions, or a stolen token
+        // would outlive the very change made to revoke it.
+        const issuedAt = typeof payload === "object" ? payload.iat : undefined;
+        if (user.passwordChangedAt && issuedAt) {
+          // `iat` has one-second resolution, so compare against the change
+          // truncated to the same second. Without this, signing in within the
+          // same second as a reset would reject the brand-new session.
+          const changedAt = Math.floor(
+            new Date(user.passwordChangedAt).getTime() / 1000
+          );
+          if (issuedAt < changedAt) {
+            return reply
+              .code(401)
+              .send({ error: "Session ended. Please sign in again." });
+          }
+        }
         req.user = user;
       } catch {
         return reply.code(401).send({ error: "Invalid or expired token" });

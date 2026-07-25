@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform as RNPlatform,
   Pressable,
@@ -12,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
+import { requestPasswordReset } from "../src/api/beamloop";
 import { useAuth } from "../src/auth/AuthContext";
 import { BeamBurst } from "../src/components/BeamBurst";
 import { platformGlyphPath } from "../src/components/platformGlyphs";
@@ -67,6 +69,29 @@ export default function Onboarding() {
       router.replace("/(tabs)/connections");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Deliberately reports the same outcome whether or not the address is
+  // registered: the alert must not become a way to discover who has an account.
+  const forgotPassword = async () => {
+    const address = email.trim();
+    if (!address) {
+      setError("Enter your email address first, then tap this again.");
+      return;
+    }
+    setError(null);
+    setBusy(true);
+    try {
+      await requestPasswordReset(address);
+      Alert.alert(
+        "Check your email",
+        `If ${address} has a BeamLoop account, a reset link is on its way. It expires in an hour.`
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't start a password reset");
     } finally {
       setBusy(false);
     }
@@ -281,6 +306,24 @@ export default function Onboarding() {
                 {mode === "signup" ? "Create account" : "Sign in"}
               </Text>
             </Pressable>
+            {mode === "login" && (
+              <Pressable
+                onPress={() => void forgotPassword()}
+                disabled={busy}
+                accessibilityRole="button"
+              >
+                <Text
+                  style={{
+                    ...type.monoNav,
+                    color: palette.link,
+                    textAlign: "center",
+                    marginTop: spacing.lg,
+                  }}
+                >
+                  Forgot your password?
+                </Text>
+              </Pressable>
+            )}
             <Pressable
               onPress={() => setMode(mode === "signup" ? "login" : "signup")}
             >

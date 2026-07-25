@@ -58,6 +58,16 @@ db.exec(`
     receivedAt TEXT NOT NULL
   );
 
+  -- Password reset tokens. Only the SHA-256 of the token is stored, so a
+  -- database leak cannot be used to reset anybody's password.
+  CREATE TABLE IF NOT EXISTS password_resets (
+    tokenHash TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    expiresAt TEXT NOT NULL,
+    usedAt TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets (userId);
+
   -- Expo push tokens. One row per device, so a user signed in on two devices
   -- is notified on both. The token is the identity: reinstalling issues a new
   -- one, and signing in as somebody else must move it to that account.
@@ -84,6 +94,11 @@ try {
 }
 try {
   db.exec("ALTER TABLE users ADD COLUMN socialExternalId TEXT");
+} catch {
+  // Column already exists.
+}
+try {
+  db.exec("ALTER TABLE users ADD COLUMN passwordChangedAt TEXT");
 } catch {
   // Column already exists.
 }

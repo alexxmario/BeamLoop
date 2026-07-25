@@ -255,6 +255,20 @@ function navLink(path: string, href: string, label: string, section: string) {
   return `<a class="navlink${active ? " active" : ""}" href="${href}"${active ? ' aria-current="page"' : ""}>${label}</a>`;
 }
 
+const RESET_FORM_CSS = `
+.reset-form{display:flex;flex-direction:column;gap:10px;max-width:420px}
+.reset-form label{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#7C8BA0}
+.reset-form input{background:#161F2B;border:1px solid rgba(255,255,255,.10);border-radius:12px;
+  padding:14px 16px;color:#E8ECF1;font-size:16px}
+.reset-form input:focus{outline:2px solid #5B8DF0;outline-offset:1px}
+.reset-form button{margin-top:8px;background:#E8ECF1;color:#0C121A;border:0;border-radius:12px;
+  padding:15px 20px;font-size:16px;font-weight:700;cursor:pointer}
+.reset-form button[disabled]{opacity:.6;cursor:default}
+#msg{margin:4px 0 0;font-size:14px;color:#9AA7B8}
+#msg.bad{color:#F2545B}
+#msg.good{color:#3FB971}
+`;
+
 function shell(options: {
   title: string;
   description: string;
@@ -281,7 +295,7 @@ function shell(options: {
   <link rel="icon" href="/assets/app-icon.png" type="image/png">
   <link rel="apple-touch-icon" href="/assets/app-icon.png">
   <link rel="preload" href="/assets/archivo-expanded-extra-bold.ttf" as="font" type="font/ttf" crossorigin>
-  <style>${styles}</style>
+  <style>${styles}${RESET_FORM_CSS}</style>
 </head>
 <body>
   <a class="skip" href="#content">Skip to content</a>
@@ -380,6 +394,62 @@ export function landingPage() {
           </div>
         </div>
       </section>`,
+  });
+}
+
+// The page a reset email links to. Plain HTML with a tiny inline script:
+// the app itself may not be installed on the device reading the email.
+export function resetPasswordPage(options: { token: string; valid: boolean; nonce: string }) {
+  const body = options.valid
+    ? `
+      <form id="f" class="reset-form" autocomplete="on">
+        <input type="hidden" name="token" value="${escapeHtml(options.token)}">
+        <label for="pw">New password</label>
+        <input id="pw" name="password" type="password" minlength="8" required
+               autocomplete="new-password" placeholder="At least 8 characters">
+        <label for="pw2">Confirm new password</label>
+        <input id="pw2" name="confirm" type="password" minlength="8" required
+               autocomplete="new-password" placeholder="Type it again">
+        <button type="submit" id="go">Change password</button>
+        <p id="msg" role="status" aria-live="polite"></p>
+      </form>
+      <script nonce="${options.nonce}">
+        (function () {
+          var f = document.getElementById('f'), msg = document.getElementById('msg'),
+              go = document.getElementById('go');
+          f.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var pw = f.password.value, pw2 = f.confirm.value;
+            if (pw !== pw2) { msg.textContent = 'Those two passwords do not match.'; msg.className = 'bad'; return; }
+            go.disabled = true; msg.className = ''; msg.textContent = 'Changing…';
+            fetch('/auth/reset-password', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: f.token.value, password: pw })
+            }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+              .then(function (res) {
+                if (!res.ok) { go.disabled = false; msg.className = 'bad'; msg.textContent = res.j.error || 'That did not work.'; return; }
+                f.innerHTML = '';
+                msg.className = 'good';
+                msg.textContent = 'Password changed. Open BeamLoop and sign in with it.';
+              })
+              .catch(function () { go.disabled = false; msg.className = 'bad'; msg.textContent = 'Network problem. Try again.'; });
+          });
+        })();
+      </script>`
+    : `<p class="lede">This reset link is invalid, has already been used, or has expired.
+         Reset links last ${60} minutes.</p>
+       <p><a class="button" href="/support">Get support</a></p>`;
+
+  return shell({
+    title: "Reset your password",
+    description: "Choose a new password for your BeamLoop account.",
+    path: "/reset-password",
+    content: `
+      <section class="legal-hero wrap">
+        <span class="eyebrow">BeamLoop</span>
+        <h1>${options.valid ? "Choose a new password" : "Link no longer valid"}</h1>
+      </section>
+      <article class="prose wrap">${body}</article>`,
   });
 }
 

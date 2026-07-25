@@ -9,6 +9,9 @@ import { signSessionToken } from "../plugins/auth.js";
 import { postForMe } from "../lib/postForMe.js";
 import { subscriptionStore } from "../lib/plans.js";
 import { pushTokenStore } from "../lib/push.js";
+import { passwordResetStore, RESET_TTL_MINUTES } from "../lib/passwordResets.js";
+import { resetEmail, sendMail } from "../lib/mailer.js";
+import { config } from "../config.js";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -55,6 +58,46 @@ export default async function authRoutes(app: FastifyInstance) {
       token: signSessionToken(user.id),
       user: { id: user.id, email: user.email },
     };
+  });
+
+  // Start a reset. Always answers 200 with the same body: a different response
+  // for a known address would turn this into an account-enumeration oracle.
+  app.post("/auth/forgot-password", authRateLimit, async (req, reply) => {
+    const body = z.object({ email: z.string().email() }).safeParse(req.body);
+    const done = { message: "If that email has an account, a reset link is on its way." };
+    if (!body.success) return reply.send(done);
+
+    const user = userStore.findByEmail(body.data.email);
+    if (user) {
+      const token = passwordResetStore.create(user.id);
+      const link = `${config.PUBLIC_BASE_URL}/reset-password?token=${encodeURIComponent(token)}`;
+      const sent = await sendMail({ to: user.email, ...resetEmail(link, RESET_TTL_MINUTES) }, req.log);
+      if (!sent) {
+        req.log.warn({ userId: user.id }, "Reset link generated but email was not delivered");
+      }
+    }
+    return reply.send(done);
+  });
+
+  // Complete a reset. The token is single-use and replaces the password, which
+  // also invalidates every session issued before now.
+  app.post("/auth/reset-password", authRateLimit, async (req, reply) => {
+    const body = z
+      .object({ token: z.string().min(1), password: z.string().min(8) })
+      .safeParse(req.body);
+    if (!body.success) {
+      return reply.code(400).send({ error: body.error.issues[0]?.message });
+    }
+    const userId = passwordResetStore.verify(body.data.token);
+    if (!userId) {
+      return reply.code(400).send({ error: "That reset link is invalid or has expired." });
+    }
+    userStore.setPassword(userId, body.data.password);
+    passwordResetStore.consume(body.data.token);
+    // Signing out other devices is the point of a reset; drop their push tokens
+    // so a stranger's phone stops receiving this account's notifications.
+    pushTokenStore.deleteByUser(userId);
+    return { message: "Your password has been changed. Sign in with it now." };
   });
 
   app.get(
@@ -124,6 +167,7 @@ export default async function authRoutes(app: FastifyInstance) {
 
       subscriptionStore.deleteByUser(userId);
       pushTokenStore.deleteByUser(userId);
+      passwordResetStore.deleteByUser(userId);
       userStore.delete(userId);
       return reply.code(204).send();
     }
