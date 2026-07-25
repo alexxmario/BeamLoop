@@ -165,20 +165,6 @@ export async function fetchPostStatus(postId: string) {
   return res.post;
 }
 
-export function connectDiscord(webhookUrl: string, name?: string) {
-  return api<{ success: boolean; message: string }>("/connections/discord", {
-    method: "POST",
-    body: { webhook_url: webhookUrl, name },
-  });
-}
-
-export function connectTelegram(botToken: string, chatId: string, name?: string) {
-  return api<{ success: boolean; message: string }>("/connections/telegram", {
-    method: "POST",
-    body: { bot_token: botToken, chat_id: chatId, name },
-  });
-}
-
 export function disconnectPlatform(platform: Platform) {
   return api<{ success: boolean }>(`/connections/${platform}`, { method: "DELETE" });
 }

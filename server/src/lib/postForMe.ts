@@ -12,8 +12,7 @@ import { config } from "../config.js";
  * scoped to a single user (multi-tenant).
  */
 
-// OAuth platforms BeamLoop drives through Post for Me. Discord & Telegram are
-// posted to directly by our backend, not via this provider.
+// Every platform BeamLoop publishes to, all driven through Post for Me.
 export const PFM_PLATFORMS = [
   "tiktok",
   "instagram",
@@ -21,6 +20,7 @@ export const PFM_PLATFORMS = [
   "facebook",
   "x",
   "threads",
+  "linkedin",
 ] as const;
 export type PfmPlatform = (typeof PFM_PLATFORMS)[number];
 

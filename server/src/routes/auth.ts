@@ -7,7 +7,6 @@ import { postStore } from "../lib/posts.js";
 import { MEDIA_DIR, THUMBNAIL_DIR } from "../lib/paths.js";
 import { signSessionToken } from "../plugins/auth.js";
 import { postForMe } from "../lib/postForMe.js";
-import { manualStore } from "../lib/manualConnections.js";
 import { subscriptionStore } from "../lib/plans.js";
 import { pushTokenStore } from "../lib/push.js";
 
@@ -65,9 +64,8 @@ export default async function authRoutes(app: FastifyInstance) {
   );
 
   // In-app account deletion — required by App Store Guideline 5.1.1(v).
-  // Disconnects the user's connected social accounts and Discord/Telegram
-  // credentials, removes their post history and persisted media, and finally
-  // the local account itself.
+  // Disconnects the user's connected social accounts, removes their post
+  // history and persisted media, and finally the local account itself.
   app.delete(
     "/auth/me",
     { preHandler: (req, reply) => app.requireAuth(req, reply) },
@@ -105,7 +103,6 @@ export default async function authRoutes(app: FastifyInstance) {
       } catch (err) {
         req.log.error({ err, userId }, "Listing accounts for deletion failed; continuing");
       }
-      manualStore.deleteAll(userId);
 
       // Remove post history and any media directories kept for retries.
       const removedPosts = postStore.deleteByUser(userId);

@@ -7,6 +7,14 @@ import type { PlatformResult } from "./platforms.js";
  * columns; the rest of each record is stored as JSON in the `data` column.
  */
 
+// A file as it arrives on an upload request, before it is persisted.
+export interface MediaFile {
+  path: string;
+  filename: string;
+  mimetype: string;
+  truncated?: boolean;
+}
+
 export interface StoredMedia {
   path: string; // absolute path under data/media/<postId>/
   filename: string;
@@ -25,8 +33,7 @@ export interface PostRecord {
   // Per-platform outcome, normalized from Post for Me's results.
   results: Array<{ platform: string } & PlatformResult>;
   createdAt: string;
-  // Future delivery time. OAuth posts are held by Post for Me; manual
-  // Discord/Telegram deliveries are picked up by our durable scheduler.
+  // Future delivery time. Post for Me durably holds the post until then.
   scheduledAt?: string;
   // Coordinated multi-channel launch, surfaced distinctly in the app.
   launchDrop?: boolean;

@@ -44,8 +44,7 @@ const styles = `
   --youtube: #f26d5b;
   --facebook: #5b8df0;
   --threads: #3fb971;
-  --discord: #7e6bf2;
-  --telegram: #4aa3e8;
+  --linkedin: #7e6bf2;
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -332,7 +331,7 @@ export function landingPage() {
           <div class="actions">${storeAction}<a class="button secondary" href="/support">Get support</a></div>
           <div class="launch-note"><span class="dot"></span> Built for iPhone · App Store launch underway</div>
           <div class="channel-strip" aria-label="Supported channels">
-            <span>Instagram</span><span>YouTube</span><span>Facebook</span><span>X</span><span>Discord</span><span>Telegram</span>
+            <span>Instagram</span><span>YouTube</span><span>Facebook</span><span>X</span><span>LinkedIn</span>
           </div>
         </div>
         <div class="console-preview" aria-label="BeamLoop multi-channel launch preview">
@@ -401,7 +400,7 @@ export function supportPage() {
           <a class="support-card" href="/account-deletion"><small>Privacy controls</small><strong>Delete your account</strong><span class="muted">Instructions and what gets removed</span></a>
         </div>
         <h2>Quick answers</h2>
-        <details><summary>A platform will not connect</summary><p>Confirm you are signing into the intended social account and approve the requested publishing access. Return to BeamLoop and refresh Connections. Discord webhooks and Telegram bot details can be replaced from the connected account menu.</p></details>
+        <details><summary>A platform will not connect</summary><p>Confirm you are signing into the intended social account and approve the requested publishing access. Return to BeamLoop and refresh Connections. You can disconnect and reconnect an account from the connected account menu.</p></details>
         <details><summary>A post is pending or failed</summary><p>Platform processing can take a few minutes, especially for video. Open History to refresh the result. If one destination fails, the successful destinations remain published and the failed result identifies where to retry.</p></details>
         <details><summary>How do I cancel a scheduled post?</summary><p>Open History, select Scheduled, then cancel the item before its delivery time. A post already accepted or published by a destination may need to be removed directly on that platform.</p></details>
         <details><summary>Where is my media stored?</summary><p>Media is held only as needed to deliver or retry your post. Scheduled media is retained until delivery, and retry media is removed within seven days afterward.</p></details>
@@ -434,7 +433,7 @@ export function accountDeletionPage() {
         </ol>
         <h2>What deletion removes</h2>
         <p>Your BeamLoop login, connection records, encrypted manual credentials, post history, scheduled posts, and retained media are removed. We also request cancellation or deletion of provider-scheduled posts where supported.</p>
-        <p>Content already published to Instagram, TikTok, YouTube, Facebook, X, Threads, Discord, Telegram, or another destination remains under that platform's control. Delete that content from the destination itself.</p>
+        <p>Content already published to Instagram, TikTok, YouTube, Facebook, X, Threads, LinkedIn, or another destination remains under that platform's control. Delete that content from the destination itself.</p>
         <div class="notice"><strong>Apple subscriptions are separate.</strong> Deleting your BeamLoop account does not cancel an App Store subscription. Before deletion, open Plans in BeamLoop and choose Manage Subscription if you want to stop renewal.</div>
         <div class="notice">If you cannot access the app, email <a href="${supportHref}?subject=BeamLoop%20account%20deletion">${supportEmail}</a> from your BeamLoop account email. We may ask you to verify ownership before deletion.</div>
       </article>`,
@@ -458,7 +457,7 @@ export function privacyPage() {
         <h2>2. Data we collect</h2>
         <ul>
           <li><strong>Account information:</strong> your email address, an internal account identifier, and a salted password hash. We never store your BeamLoop password in plain text.</li>
-          <li><strong>Connected accounts:</strong> identifiers and authorization needed to publish to accounts you connect. OAuth connections are managed through our publishing provider. Discord webhook and Telegram bot details you enter are encrypted at rest.</li>
+          <li><strong>Connected accounts:</strong> identifiers and authorization needed to publish to accounts you connect. These OAuth connections are managed through our publishing provider; BeamLoop never receives your password for a connected platform.</li>
           <li><strong>Content and instructions:</strong> photos, videos, captions, titles, destination selections, placement choices, and scheduled delivery times.</li>
           <li><strong>Service data:</strong> request timestamps, delivery status, IP-derived security information, and error logs needed to protect and operate the service.</li>
           <li><strong>Subscription data:</strong> Apple-signed product and transaction identifiers, subscription status and expiry, and the BeamLoop account identifier attached to a purchase. Apple processes payment; BeamLoop does not receive your payment-card details.</li>

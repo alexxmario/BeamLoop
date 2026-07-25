@@ -34,21 +34,8 @@ db.exec(`
     data TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_posts_user ON posts (userId);
-  -- The manual-delivery worker scans for due posts once a second; without this
-  -- that is a full table scan of every post ever made.
   CREATE INDEX IF NOT EXISTS idx_posts_scheduled
     ON posts (scheduledAt) WHERE scheduledAt IS NOT NULL;
-
-  -- Discord webhook / Telegram bot credentials, stored by us (these platforms
-  -- don't use OAuth and aren't handled by the posting provider).
-  CREATE TABLE IF NOT EXISTS manual_connections (
-    userId TEXT NOT NULL,
-    platform TEXT NOT NULL,
-    credentials TEXT NOT NULL,
-    name TEXT,
-    createdAt TEXT NOT NULL,
-    PRIMARY KEY (userId, platform)
-  );
 
   -- Verified StoreKit subscription state. We never receive or store payment
   -- card details; Apple is the merchant and signs every transaction update.

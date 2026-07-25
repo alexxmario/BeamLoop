@@ -91,11 +91,12 @@ export const spectrum = {
   threads: "#3FB971",
 } as const;
 
-// NOT in the imported design (it only covers the six OAuth channels).
+// NOT in the imported design (it only covers the six original channels).
 // Extrapolated to keep "one hue per channel" intact — flagged for review.
+// This periwinkle already shipped alongside the Facebook azure, so the two
+// are known to read as distinct channels side by side.
 export const spectrumExtended = {
-  discord: "#7E6BF2",
-  telegram: "#4AA3E8",
+  linkedin: "#7E6BF2",
 } as const;
 
 export const platformHue: Record<Platform, string> = {
@@ -111,8 +112,7 @@ export const platformMono: Record<Platform, string> = {
   facebook: "FB",
   x: "X",
   threads: "TH",
-  discord: "DC",
-  telegram: "TG",
+  linkedin: "LI",
 };
 
 // Spectrum in canonical order (gradients, dot rows, burst spokes).
@@ -123,6 +123,7 @@ export const spectrumOrder = [
   spectrum.facebook,
   spectrum.x,
   spectrum.threads,
+  spectrumExtended.linkedin,
 ] as const;
 
 // ---------------------------------------------------------------- type

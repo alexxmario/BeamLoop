@@ -16,8 +16,7 @@ const LABELS: Record<string, string> = {
   facebook: "Facebook",
   x: "X",
   threads: "Threads",
-  discord: "Discord",
-  telegram: "Telegram",
+  linkedin: "LinkedIn",
 };
 
 const label = (platform: string) => LABELS[platform] ?? platform;

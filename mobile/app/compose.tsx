@@ -86,15 +86,13 @@ const AR_PREVIEW: Record<Platform, { label: string; height: number }> = {
   facebook: { label: "1:1", height: 90 },
   x: { label: "16:9", height: 52 },
   threads: { label: "4:5", height: 112 },
-  discord: { label: "1:1", height: 90 },
-  telegram: { label: "1:1", height: 90 },
+  linkedin: { label: "1.91:1", height: 90 },
 };
 
 const X_LIMIT = 280;
 const PLATFORM_CAPTION_LIMITS: Partial<Record<Platform, number>> = {
   x: X_LIMIT,
-  discord: 2000,
-  telegram: 1024,
+  linkedin: 3000,
 };
 const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
 
@@ -970,14 +968,12 @@ function ChannelGroupsBar({
   onApply: (platforms: Platform[]) => void;
   onManage: () => void;
 }) {
+  // Every channel is a social account now, so the old Social/Community split
+  // has nothing left to divide. "All live" plus the user's own groups.
   const live = connections.map((connection) => connection.platform);
-  const social = live.filter((platform) => platform !== "discord" && platform !== "telegram");
-  const community = live.filter((platform) => platform === "discord" || platform === "telegram");
   const options = [
     { id: "all", name: "All live", platforms: live },
-    ...(social.length ? [{ id: "social", name: "Social", platforms: social }] : []),
-    ...(community.length ? [{ id: "community", name: "Community", platforms: community }] : []),
-    ...groups.slice(0, 4),
+    ...groups.slice(0, 5),
   ];
   const selectedKey = [...selected].sort().join(",");
 

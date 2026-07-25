@@ -5,8 +5,7 @@ export type Platform =
   | "facebook"
   | "x"
   | "threads"
-  | "discord"
-  | "telegram";
+  | "linkedin";
 
 export interface Connection {
   platform: Platform;
@@ -18,7 +17,6 @@ export interface Connection {
     username?: string;
     social_images?: string;
   } | null;
-  connectVia: "oauth" | "manual";
 }
 
 export interface SessionUser {
@@ -34,7 +32,6 @@ export interface PlatformResult {
   pending?: boolean;
   // Present when a direct delivery has started. An unconfirmed delivery is
   // deliberately not sent again automatically.
-  attemptedAt?: string;
   url?: string;
   post_id?: string;
   error?: string;
@@ -85,7 +82,6 @@ export interface BillingStatus {
   usage: {
     postsThisMonth: number;
     scheduledPosts: number;
-    manualConnections: number;
     resetsAt: string;
   };
 }
@@ -97,8 +93,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   facebook: "Facebook",
   x: "X",
   threads: "Threads",
-  discord: "Discord",
-  telegram: "Telegram",
+  linkedin: "LinkedIn",
 };
 
 // Platforms not yet enabled at launch. TikTok is pending its Content Posting

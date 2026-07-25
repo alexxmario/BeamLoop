@@ -180,16 +180,10 @@ export default function ConnectionsScreen() {
       void reconnectUnavailable(item);
       return;
     }
-    if (item.platform === "discord") router.push("/connect/discord");
-    else if (item.platform === "telegram") router.push("/connect/telegram");
-    else openOAuth(item.platform);
+    openOAuth(item.platform);
   };
 
   const manageConnection = (item: Connection) => {
-    const editManual = () => {
-      if (item.platform === "discord") router.push("/connect/discord");
-      if (item.platform === "telegram") router.push("/connect/telegram");
-    };
     const disconnect = () => {
       setManaging(item.platform);
       setError(null);
@@ -200,12 +194,9 @@ export default function ConnectionsScreen() {
     };
     Alert.alert(
       `Manage ${PLATFORM_LABELS[item.platform]}`,
-      item.connectVia === "manual"
-        ? "Replace its credentials or disconnect it from BeamLoop."
-        : "Disconnect this account from BeamLoop. You can connect it again whenever you like.",
+      "Disconnect this account from BeamLoop. You can connect it again whenever you like.",
       [
         { text: "Cancel", style: "cancel" },
-        ...(item.connectVia === "manual" ? [{ text: "Replace credentials", onPress: editManual }] : []),
         { text: "Disconnect", style: "destructive" as const, onPress: disconnect },
       ]
     );
@@ -461,11 +452,7 @@ function ConnectionRow({
               ? item.statusMessage ?? "Account unavailable"
             : item.connected
               ? handle ?? "Connected"
-              : item.connectVia === "manual"
-                ? item.platform === "discord"
-                  ? "Webhook URL"
-                  : "Bot token + chat ID"
-                : "Not connected"}
+              : "Not connected"}
         </Text>
       </View>
 

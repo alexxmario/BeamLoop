@@ -5,13 +5,17 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { z } from "zod";
-import { postStore, type PostRecord, type StoredMedia } from "../lib/posts.js";
+import {
+  postStore,
+  type MediaFile,
+  type PostRecord,
+  type StoredMedia,
+} from "../lib/posts.js";
 import { formatResetDate, subscriptionStore, usageForUser } from "../lib/plans.js";
 import { notifyPostSettled } from "../lib/postNotifications.js";
 import { MEDIA_DIR, THUMBNAIL_DIR } from "../lib/paths.js";
 import {
   OAUTH_PLATFORMS,
-  MANUAL_PLATFORMS,
   isReconnectError,
   type Platform,
   type PlatformResult,
@@ -24,17 +28,8 @@ import {
   type PfmFeedPost,
   type PfmPostResult,
 } from "../lib/postForMe.js";
-import {
-  manualStore,
-  ManualDeliveryError,
-  postToDiscord,
-  postToTelegram,
-  type DiscordCredentials,
-  type TelegramCredentials,
-  type MediaFile,
-} from "../lib/manualConnections.js";
 
-const ALL_PLATFORMS = [...OAUTH_PLATFORMS, ...MANUAL_PLATFORMS] as const;
+const ALL_PLATFORMS = OAUTH_PLATFORMS;
 
 const fieldsSchema = z.object({
   title: z.string().min(1, "A caption/title is required").max(2200),
@@ -133,18 +128,23 @@ function validatePlatformCaptions(
   platforms: readonly Platform[],
   overrides: Record<string, string>
 ): string | undefined {
-  // Fail before a potentially large media upload reaches the destination.
-  // The direct APIs would otherwise truncate Discord/Telegram silently.
+  // Fail before a potentially large media upload reaches the destination,
+  // rather than letting the platform truncate the caption silently.
   const limits: Partial<Record<Platform, number>> = {
     x: 280,
-    discord: 2000,
-    telegram: 1024,
+    linkedin: 3000,
   };
   for (const platform of platforms) {
     const limit = limits[platform];
     const effectiveCaption = overrides[platform] || caption;
     if (limit && effectiveCaption.length > limit) {
-      return `${platform === "x" ? "X" : platform[0]!.toUpperCase() + platform.slice(1)} captions must be ${limit} characters or fewer`;
+      const name =
+        platform === "x"
+          ? "X"
+          : platform === "linkedin"
+            ? "LinkedIn"
+            : platform[0]!.toUpperCase() + platform.slice(1);
+      return `${name} captions must be ${limit} characters or fewer`;
     }
   }
   return undefined;
@@ -263,8 +263,7 @@ function errText(error: unknown): string {
 }
 
 // Publish one post to the chosen platforms and return a normalized per-platform
-// result array. OAuth platforms go through Post for Me; Discord/Telegram are
-// posted to directly.
+// result array. Every platform is published through Post for Me.
 async function publish(opts: {
   userId: string;
   socialExternalId?: string;
@@ -276,7 +275,6 @@ async function publish(opts: {
   placements?: Record<string, "timeline" | "reels" | "stories">;
   scheduledAt?: string;
   providerExternalId?: string;
-  onManualDispatch?: (platform: Platform, attemptedAt: string) => void;
   onProviderAccepted?: (
     postId: string,
     accountPlatforms: Record<string, string>
@@ -296,7 +294,6 @@ async function publish(opts: {
     placements,
     scheduledAt,
     providerExternalId,
-    onManualDispatch,
     onProviderAccepted,
   } = opts;
   const results: Array<{ platform: string } & PlatformResult> = [];
@@ -305,11 +302,7 @@ async function publish(opts: {
   const oauthPlatforms = platforms.filter((p): p is PfmPlatform =>
     (OAUTH_PLATFORMS as readonly string[]).includes(p)
   );
-  const manualPlatforms = platforms.filter((p) =>
-    (MANUAL_PLATFORMS as readonly string[]).includes(p)
-  );
 
-  // --- OAuth platforms via Post for Me ---
   if (oauthPlatforms.length > 0) {
     const accounts = await postForMe.listAccounts(socialExternalId);
     const idByPlatform = new Map<string, string>();
@@ -384,52 +377,6 @@ async function publish(opts: {
       }
     }
   }
-
-  // --- Discord / Telegram: direct sends ---
-  const manualResults = await Promise.all(
-    manualPlatforms.map(async (p) => {
-      const text = overrides[p] || caption;
-      if (scheduledAt) {
-        return { platform: p, success: false, pending: true };
-      }
-      const attemptedAt = new Date().toISOString();
-      onManualDispatch?.(p, attemptedAt);
-      try {
-        if (p === "discord") {
-          const stored = manualStore.get<DiscordCredentials>(userId, "discord");
-          if (!stored) throw new Error("Discord not connected");
-          await postToDiscord(stored.credentials.webhook_url, text, media);
-        } else {
-          const stored = manualStore.get<TelegramCredentials>(userId, "telegram");
-          if (!stored) throw new Error("Telegram not connected");
-          await postToTelegram(
-            stored.credentials.bot_token,
-            stored.credentials.chat_id,
-            text,
-            media,
-            kind
-          );
-        }
-        return { platform: p, success: true };
-      } catch (e) {
-        if (e instanceof ManualDeliveryError && e.outcome === "unknown") {
-          return {
-            platform: p,
-            success: false,
-            pending: true,
-            attemptedAt,
-            error: e.message,
-          };
-        }
-        return {
-          platform: p,
-          success: false,
-          error: e instanceof Error ? e.message : "Send failed",
-        };
-      }
-    })
-  );
-  results.push(...manualResults);
 
   return { results, pfmPostId };
 }
@@ -512,64 +459,6 @@ async function refreshPending(userId: string, socialExternalId = userId): Promis
   }
 }
 
-const scheduledInFlight = new Set<string>();
-
-function markManualDispatch(postId: string, platform: Platform, attemptedAt: string) {
-  const post = postStore.findById(postId);
-  const current = post?.results.find((result) => result.platform === platform);
-  if (!current) return;
-  postStore.updateResults(postId, [{ ...current, attemptedAt }]);
-}
-
-// Post for Me durably holds OAuth posts until their scheduled time. Discord
-// and Telegram are direct integrations, so this small durable worker picks up
-// their pending deliveries from SQLite and also catches up after a restart.
-async function publishDueManualPosts(app: FastifyInstance): Promise<void> {
-  const due = postStore.listScheduledDue(new Date().toISOString());
-  for (const post of due) {
-    const platforms = post.results
-      .filter(
-        (result) =>
-          result.pending &&
-          !result.attemptedAt &&
-          (MANUAL_PLATFORMS as readonly string[]).includes(result.platform)
-      )
-      .map((result) => result.platform as Platform);
-    if (platforms.length === 0 || scheduledInFlight.has(post.id)) continue;
-    scheduledInFlight.add(post.id);
-    try {
-      if (!post.mediaFiles?.length) {
-        postStore.updateResults(
-          post.id,
-          platforms.map((platform) => ({
-            platform,
-            success: false,
-            error: "Scheduled media is no longer available",
-          }))
-        );
-        continue;
-      }
-      const { results } = await publish({
-        userId: post.userId,
-        caption: buildCaption(post.title, post.description),
-        platforms,
-        overrides: post.overrides ?? {},
-        placements: post.placements,
-        kind: post.kind,
-        media: post.mediaFiles,
-        onManualDispatch: (platform, attemptedAt) =>
-          markManualDispatch(post.id, platform, attemptedAt),
-      });
-      postStore.updateResults(post.id, results);
-      await notifyPostSettled(post.id, app.log);
-    } catch (err) {
-      app.log.error({ err, postId: post.id }, "Scheduled manual delivery failed");
-    } finally {
-      scheduledInFlight.delete(post.id);
-    }
-  }
-}
-
 // Move upload temp files into data/media/<postId>/ so retries can re-send.
 async function persistMedia(postId: string, files: MediaFile[]): Promise<StoredMedia[]> {
   const dir = join(MEDIA_DIR, postId);
@@ -635,16 +524,6 @@ export default async function uploadRoutes(app: FastifyInstance) {
   cleanExpiredMedia();
   const cleanupTimer = setInterval(cleanExpiredMedia, 60 * 60 * 1000);
   cleanupTimer.unref();
-
-  const sendDue = () =>
-    publishDueManualPosts(app).catch((err) =>
-      app.log.error({ err }, "Scheduled delivery scan failed")
-    );
-  sendDue();
-  // A one-second cadence keeps direct community channels close to the exact
-  // provider-managed OAuth launch time without busy-waiting.
-  const scheduleTimer = setInterval(sendDue, 1_000);
-  scheduleTimer.unref();
 
   const handleUpload = (kind: "video" | "photos") =>
     async function (req: FastifyRequest, reply: FastifyReply) {
@@ -851,8 +730,6 @@ export default async function uploadRoutes(app: FastifyInstance) {
             providerExternalId: hasOauthPlatform ? postId : undefined,
             onProviderAccepted: (pfmPostId, pfmAccountPlatforms) =>
               postStore.update(post.id, { pfmPostId, pfmAccountPlatforms }),
-            onManualDispatch: (platform, attemptedAt) =>
-              markManualDispatch(post.id, platform, attemptedAt),
           });
           postStore.updateResults(post.id, results);
           if (pfmPostId) postStore.update(post.id, { pfmPostId });
@@ -1005,8 +882,6 @@ export default async function uploadRoutes(app: FastifyInstance) {
         providerExternalId,
         onProviderAccepted: (pfmPostId, pfmAccountPlatforms) =>
           postStore.update(post.id, { pfmPostId, pfmAccountPlatforms }),
-        onManualDispatch: (platform, attemptedAt) =>
-          markManualDispatch(post.id, platform, attemptedAt),
       });
 
       postStore.updateResults(post.id, retried);

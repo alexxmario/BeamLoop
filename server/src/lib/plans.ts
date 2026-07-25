@@ -42,9 +42,9 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     launchDrops: false,
   },
   pro: {
-    // Every destination BeamLoop supports (6 OAuth + Discord + Telegram).
-    // Keep in sync with OAUTH_PLATFORMS + MANUAL_PLATFORMS in platforms.ts.
-    channels: 8,
+    // Every destination BeamLoop supports. Keep in sync with OAUTH_PLATFORMS
+    // in platforms.ts.
+    channels: 7,
     postsPerMonth: 500,
     // A high, explicit fair-use ceiling is safer and clearer than an
     // unenforceable "unlimited" promise.
@@ -216,13 +216,9 @@ export function usageForUser(userId: string) {
       "SELECT COUNT(*) AS count FROM posts WHERE userId = ? AND scheduledAt > ?"
     )
     .get(userId, new Date().toISOString()) as { count: number };
-  const manual = db
-    .prepare("SELECT COUNT(*) AS count FROM manual_connections WHERE userId = ?")
-    .get(userId) as { count: number };
   return {
     postsThisMonth: posts.count,
     scheduledPosts: scheduled.count,
-    manualConnections: manual.count,
     resetsAt: end,
   };
 }

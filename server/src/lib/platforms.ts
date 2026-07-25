@@ -4,7 +4,8 @@
  * ripple through the whole codebase.)
  */
 
-// OAuth platforms, published through Post for Me.
+// Every platform BeamLoop publishes to. All of them are OAuth accounts driven
+// through Post for Me, so there is exactly one publishing path.
 export const OAUTH_PLATFORMS = [
   "tiktok",
   "instagram",
@@ -12,14 +13,10 @@ export const OAUTH_PLATFORMS = [
   "facebook",
   "x",
   "threads",
+  "linkedin",
 ] as const;
 
-// Credential-based platforms, posted to directly by our backend.
-export const MANUAL_PLATFORMS = ["discord", "telegram"] as const;
-
-export type Platform =
-  | (typeof OAUTH_PLATFORMS)[number]
-  | (typeof MANUAL_PLATFORMS)[number];
+export type Platform = (typeof OAUTH_PLATFORMS)[number];
 
 // Normalized per-platform publish outcome (provider-agnostic).
 // `pending` = accepted by the provider but the platform result hasn't landed
@@ -27,10 +24,6 @@ export type Platform =
 export interface PlatformResult {
   success: boolean;
   pending?: boolean;
-  // Persisted immediately before a direct Discord/Telegram write. If the
-  // process exits or the network response is ambiguous, workers must not
-  // automatically send the same content again.
-  attemptedAt?: string;
   url?: string;
   post_id?: string;
   error?: string;

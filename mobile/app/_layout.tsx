@@ -109,22 +109,6 @@ export default function RootLayout() {
           options={{ headerShown: false, presentation: "fullScreenModal" }}
         />
         <Stack.Screen
-          name="connect/discord"
-          options={{
-            title: "Connect Discord",
-            presentation: "modal",
-            headerStyle: { backgroundColor: palette.sheet },
-          }}
-        />
-        <Stack.Screen
-          name="connect/telegram"
-          options={{
-            title: "Connect Telegram",
-            presentation: "modal",
-            headerStyle: { backgroundColor: palette.sheet },
-          }}
-        />
-        <Stack.Screen
           name="connections/callback"
           options={{ headerShown: false }}
         />
