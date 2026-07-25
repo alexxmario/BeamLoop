@@ -70,6 +70,16 @@ db.exec(`
     notificationUUID TEXT PRIMARY KEY,
     receivedAt TEXT NOT NULL
   );
+
+  -- Expo push tokens. One row per device, so a user signed in on two devices
+  -- is notified on both. The token is the identity: reinstalling issues a new
+  -- one, and signing in as somebody else must move it to that account.
+  CREATE TABLE IF NOT EXISTS push_tokens (
+    token TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    createdAt TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens (userId);
 `);
 
 // Existing installations created the posts table before idempotency support.

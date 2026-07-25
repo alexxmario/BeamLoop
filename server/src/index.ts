@@ -10,6 +10,7 @@ import uploadRoutes from "./routes/uploads.js";
 import legalRoutes from "./routes/legal.js";
 import webhookRoutes from "./routes/webhooks.js";
 import billingRoutes from "./routes/billing.js";
+import notificationRoutes from "./routes/notifications.js";
 import { PostForMeError } from "./lib/postForMe.js";
 
 // Railway terminates TLS and forwards the client address. Trusting that proxy
@@ -59,6 +60,7 @@ await app.register(legalRoutes);
 await app.register(webhookRoutes);
 await app.register(billingRoutes);
 await app.register(authRoutes);
+await app.register(notificationRoutes);
 await app.register(connectionRoutes);
 await app.register(uploadRoutes);
 

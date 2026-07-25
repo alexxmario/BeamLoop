@@ -5,6 +5,7 @@ import { config } from "../config.js";
 import { postForMe } from "../lib/postForMe.js";
 import { postStore } from "../lib/posts.js";
 import { OAUTH_PLATFORMS, type Platform } from "../lib/platforms.js";
+import { notifyPostSettled } from "../lib/postNotifications.js";
 
 const envelopeSchema = z.object({
   event_type: z.string(),
@@ -152,6 +153,7 @@ export default async function webhookRoutes(app: FastifyInstance) {
     }
 
     postStore.updateResults(post.id, [confirmed]);
+    await notifyPostSettled(post.id, app.log);
     app.log.info(
       { postId: post.id, platform, success: confirmed.success },
       "Post result confirmed by webhook"

@@ -51,6 +51,9 @@ export interface PostRecord {
   // tighter than our plan limits, so retries are counted and spaced out.
   retryCount?: number;
   lastRetryAt?: string;
+  // Set when the "your post settled" push went out, so several platforms
+  // finishing at once can't each notify.
+  notifiedAt?: string;
 }
 
 interface PostRow {

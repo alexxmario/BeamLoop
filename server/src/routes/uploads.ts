@@ -7,6 +7,7 @@ import { pipeline } from "node:stream/promises";
 import { z } from "zod";
 import { postStore, type PostRecord, type StoredMedia } from "../lib/posts.js";
 import { formatResetDate, subscriptionStore, usageForUser } from "../lib/plans.js";
+import { notifyPostSettled } from "../lib/postNotifications.js";
 import { MEDIA_DIR, THUMBNAIL_DIR } from "../lib/paths.js";
 import {
   OAUTH_PLATFORMS,
@@ -504,7 +505,10 @@ async function refreshPending(userId: string, socialExternalId = userId): Promis
       pfmResults
     );
     const updated = resolved.filter((result) => !result.pending);
-    if (updated.length > 0) postStore.updateResults(post.id, updated);
+    if (updated.length > 0) {
+      postStore.updateResults(post.id, updated);
+      await notifyPostSettled(post.id);
+    }
   }
 }
 
@@ -557,6 +561,7 @@ async function publishDueManualPosts(app: FastifyInstance): Promise<void> {
           markManualDispatch(post.id, platform, attemptedAt),
       });
       postStore.updateResults(post.id, results);
+      await notifyPostSettled(post.id, app.log);
     } catch (err) {
       app.log.error({ err, postId: post.id }, "Scheduled manual delivery failed");
     } finally {

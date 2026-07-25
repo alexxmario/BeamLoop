@@ -50,6 +50,7 @@ import { PlatformGlyph } from "../src/components/PlatformGlyph";
 import { Stripes } from "../src/components/Stripes";
 import { useReducedMotion } from "../src/hooks/useReducedMotion";
 import { useAuth } from "../src/auth/AuthContext";
+import { registerForPushNotifications } from "../src/push";
 import {
   deleteIdea,
   listIdeas,
@@ -557,6 +558,10 @@ export default function ComposeModal() {
         media.kind === "video"
           ? await uploadVideo(media.items[0]!, options, idempotencyKey, thumbnail)
           : await uploadPhotos(media.items, options, idempotencyKey, thumbnail);
+      // The one moment where asking for notifications is self-explanatory: the
+      // post is on its way and the outcome will arrive after they've moved on.
+      // Deliberately not awaited — the dialog must not delay the result screen.
+      void registerForPushNotifications({ askIfNeeded: true });
       if (!checkingLater.current) {
         setStep({ name: "done", post, elapsedMs: Date.now() - started });
       }

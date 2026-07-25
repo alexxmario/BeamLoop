@@ -9,6 +9,7 @@ import {
 } from "@expo-google-fonts/jetbrains-mono";
 import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
+import * as Notifications from "expo-notifications";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
@@ -40,6 +41,22 @@ function AuthGate() {
       router.replace("/onboarding");
     }
   }, [user, loading, segments, router]);
+
+  // A publishing update is only useful if it lands you on the post it's about.
+  // Handles both a tap while running and a cold start from a notification.
+  useEffect(() => {
+    if (!user) return;
+    const open = (response: Notifications.NotificationResponse | null) => {
+      const data = response?.notification.request.content.data as
+        | { type?: string }
+        | undefined;
+      if (data?.type === "post-settled") router.navigate("/(tabs)/history");
+    };
+    void Notifications.getLastNotificationResponseAsync().then(open);
+    const subscription =
+      Notifications.addNotificationResponseReceivedListener(open);
+    return () => subscription.remove();
+  }, [user, router]);
 
   return null;
 }

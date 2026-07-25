@@ -182,3 +182,19 @@ export function connectTelegram(botToken: string, chatId: string, name?: string)
 export function disconnectPlatform(platform: Platform) {
   return api<{ success: boolean }>(`/connections/${platform}`, { method: "DELETE" });
 }
+
+// Push registration. The server keys devices by token, so re-registering the
+// same token simply reassigns it to the current account.
+export function registerPushToken(token: string) {
+  return api<{ registered: boolean }>("/notifications/token", {
+    method: "POST",
+    body: { token },
+  });
+}
+
+export function unregisterPushToken(token: string) {
+  return api<void>("/notifications/token", {
+    method: "DELETE",
+    body: { token },
+  });
+}

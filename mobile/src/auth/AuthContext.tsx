@@ -11,6 +11,10 @@ import { deleteAccount, fetchMe, login, signup } from "../api/beamloop";
 import type { SessionUser } from "../api/types";
 import { clearIdeas } from "../ideas";
 import { clearChannelGroups } from "../channelGroups";
+import {
+  registerForPushNotifications,
+  unregisterForPushNotifications,
+} from "../push";
 
 interface AuthState {
   loading: boolean;
@@ -45,6 +49,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
+  // Keep the device's push token pointed at whoever is currently signed in.
+  // Never prompts here — the permission dialog is raised at the moment it
+  // makes sense, when a post is sent. This only refreshes an existing grant.
+  useEffect(() => {
+    if (!user) return;
+    void registerForPushNotifications({ askIfNeeded: false });
+  }, [user?.id]);
+
   const signIn = useCallback(async (email: string, password: string) => {
     setUser(await login(email, password));
   }, []);
@@ -54,6 +66,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    // Detach the device first: once the token is cleared the request can no
+    // longer authenticate.
+    await unregisterForPushNotifications();
     await tokenStorage.clear();
     setUser(null);
   }, []);
