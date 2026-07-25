@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { openAsBlob } from "node:fs";
+import { stat } from "node:fs/promises";
 import { db } from "./db.js";
 import { config } from "../config.js";
 
@@ -115,8 +116,18 @@ export const manualStore = {
   },
 };
 
+// Connect-time checks run while the user waits on a form, so they get a much
+// shorter leash than a publish.
+const VALIDATE_TIMEOUT_MS = 15_000;
+const validateInit = { signal: AbortSignal.timeout(VALIDATE_TIMEOUT_MS) };
+
 export async function validateDiscordWebhook(webhookUrl: string): Promise<void> {
-  const response = await fetch(webhookUrl);
+  let response: Response;
+  try {
+    response = await fetch(webhookUrl, validateInit);
+  } catch {
+    throw new Error("Couldn't reach Discord to verify that webhook");
+  }
   if (!response.ok) throw new Error("Discord could not verify that webhook");
 }
 
@@ -126,8 +137,14 @@ export async function validateTelegramCredentials(
 ): Promise<void> {
   const api = (method: string) =>
     `https://api.telegram.org/bot${botToken}/${method}?chat_id=${encodeURIComponent(chatId)}`;
-  const me = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
-  const chat = await fetch(api("getChat"));
+  let me: Response;
+  let chat: Response;
+  try {
+    me = await fetch(`https://api.telegram.org/bot${botToken}/getMe`, validateInit);
+    chat = await fetch(api("getChat"), validateInit);
+  } catch {
+    throw new Error("Couldn't reach Telegram to verify that bot");
+  }
   const meJson = (await me.json().catch(() => ({}))) as { ok?: boolean };
   const chatJson = (await chat.json().catch(() => ({}))) as { ok?: boolean };
   if (!me.ok || !chat.ok || !meJson.ok || !chatJson.ok) {
@@ -137,28 +154,90 @@ export async function validateTelegramCredentials(
 
 // ------------------------------------------------------------------ senders
 
+// We accept uploads far larger than either platform will take: Discord
+// webhooks cap at 10 MB unless the server is boosted, and Telegram bots cap at
+// 50 MB of video and 10 MB per photo. Checking up front turns an opaque 413
+// from the platform into a message that names the actual limit.
+const DISCORD_MAX_BYTES = 10 * 1024 * 1024;
+const TELEGRAM_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+const TELEGRAM_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
+
+// Neither platform should be able to hang a publish indefinitely.
+const SEND_TIMEOUT_MS = 120_000;
+
+const asMb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
+
+async function assertWithinLimit(
+  media: MediaFile[],
+  perFileMax: number,
+  platform: string
+): Promise<void> {
+  let total = 0;
+  for (const file of media) {
+    const { size } = await stat(file.path);
+    total += size;
+    if (size > perFileMax) {
+      throw new ManualDeliveryError(
+        `${file.filename} is ${asMb(size)} MB. ${platform} accepts up to ${asMb(perFileMax)} MB.`,
+        "rejected"
+      );
+    }
+  }
+  // Discord counts every attachment in one request against the same ceiling.
+  if (platform === "Discord" && total > perFileMax) {
+    throw new ManualDeliveryError(
+      `These files total ${asMb(total)} MB. Discord accepts up to ${asMb(perFileMax)} MB per message.`,
+      "rejected"
+    );
+  }
+}
+
 // Discord: one multipart POST to the webhook with the caption + attachments.
 export async function postToDiscord(
   webhookUrl: string,
   caption: string,
   media: MediaFile[]
 ): Promise<void> {
+  await assertWithinLimit(media, DISCORD_MAX_BYTES, "Discord");
+
   const form = new FormData();
   form.append("payload_json", JSON.stringify({ content: caption.slice(0, 2000) }));
   for (const [i, f] of media.entries()) {
     form.append(`files[${i}]`, await openAsBlob(f.path, { type: f.mimetype }), f.filename);
   }
+  // Build the URL properly: a webhook may already carry a query string (a
+  // thread_id, for instance), and appending "?wait=true" would corrupt it.
+  const url = new URL(webhookUrl);
+  url.searchParams.set("wait", "true");
   let res: Response;
   try {
-    res = await fetch(`${webhookUrl}?wait=true`, { method: "POST", body: form });
+    res = await fetch(url, {
+      method: "POST",
+      body: form,
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+    });
   } catch {
     throw new ManualDeliveryError(
       "Discord may have accepted this post, but BeamLoop could not confirm it. It will not be sent again automatically.",
       "unknown"
     );
   }
+  if (res.status === 429) {
+    const retryAfter = Number(res.headers.get("retry-after"));
+    throw new ManualDeliveryError(
+      Number.isFinite(retryAfter) && retryAfter > 0
+        ? `Discord is rate limiting this webhook. Try again in ${Math.ceil(retryAfter)}s.`
+        : "Discord is rate limiting this webhook. Try again shortly.",
+      "rejected"
+    );
+  }
   if (!res.ok) {
-    throw new ManualDeliveryError(`Discord webhook failed (${res.status})`, "rejected");
+    throw new ManualDeliveryError(
+      res.status === 404
+        ? "That Discord webhook no longer exists. Reconnect the channel."
+        : `Discord webhook failed (${res.status})`,
+      "rejected"
+    );
   }
 }
 
@@ -174,6 +253,12 @@ export async function postToTelegram(
   const api = (method: string) => `https://api.telegram.org/bot${botToken}/${method}`;
   const cap = caption.slice(0, 1024);
 
+  await assertWithinLimit(
+    media,
+    kind === "video" ? TELEGRAM_VIDEO_MAX_BYTES : TELEGRAM_PHOTO_MAX_BYTES,
+    "Telegram"
+  );
+
   async function send(method: string, fileField: string, file: MediaFile, withCaption: boolean) {
     const form = new FormData();
     form.append("chat_id", chatId);
@@ -181,7 +266,11 @@ export async function postToTelegram(
     form.append(fileField, await openAsBlob(file.path, { type: file.mimetype }), file.filename);
     let res: Response;
     try {
-      res = await fetch(api(method), { method: "POST", body: form });
+      res = await fetch(api(method), {
+        method: "POST",
+        body: form,
+        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+      });
     } catch {
       throw new ManualDeliveryError(
         "Telegram may have accepted this post, but BeamLoop could not confirm it. It will not be sent again automatically.",
@@ -229,7 +318,11 @@ export async function postToTelegram(
     }
     let res: Response;
     try {
-      res = await fetch(api("sendMediaGroup"), { method: "POST", body: form });
+      res = await fetch(api("sendMediaGroup"), {
+        method: "POST",
+        body: form,
+        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+      });
     } catch {
       throw new ManualDeliveryError(
         "Telegram may have accepted this album, but BeamLoop could not confirm it. It will not be sent again automatically.",

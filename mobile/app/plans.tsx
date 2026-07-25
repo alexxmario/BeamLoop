@@ -49,7 +49,7 @@ const FEATURES: Record<Exclude<PlanId, "free">, string[]> = {
     "One year of post history",
   ],
   pro: [
-    "All 8 channels — every platform we support",
+    "Every channel BeamLoop supports",
     "500 posts each month",
     "Up to 1,000 scheduled posts",
     "Launch Drops across channels",
