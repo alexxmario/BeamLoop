@@ -1,14 +1,14 @@
 # BeamLoop
 
 Post a video or photo to multiple connected accounts from one compose flow.
-The launch set is Instagram, YouTube, Facebook, X, Discord, and Telegram.
+The launch set is Instagram, YouTube, Facebook, X, and LinkedIn.
 TikTok and Threads remain visible in the account list as coming soon and are
 not available to connect or publish yet.
 
 ## Structure
 
-- `server/` — Fastify/TypeScript backend. It connects OAuth platforms and
-  publishes through Post for Me; Discord and Telegram are sent directly.
+- `server/` — Fastify/TypeScript backend. It connects every platform over
+  OAuth and publishes through Post for Me.
 - `mobile/` — Expo/React Native app. It stores only its BeamLoop session
   locally and talks to the backend.
 
@@ -44,8 +44,8 @@ development or preview build, not Expo Go.
   when the shared caption is longer.
 - Upload requests use an idempotency key, so retrying after a network timeout
   returns the original post rather than publishing another copy.
-- Publish immediately or choose a one-tap future slot. OAuth schedules are held
-  by Post for Me; Discord and Telegram schedules are durably queued in SQLite.
+- Publish immediately or choose a one-tap future slot. Post for Me durably
+  holds a scheduled post until its delivery time.
 - Instagram and Facebook can target timeline, Reels, or Stories, while reusable
   caption ideas stay private on the device.
 - Post Preflight checks connection health, media metadata, platform caption
@@ -67,7 +67,6 @@ development or preview build, not Expo Go.
 | GET / DELETE | `/auth/me` | Read or remove the BeamLoop account |
 | GET | `/connections` | Current platform states |
 | POST | `/connections/link` | OAuth connection URL |
-| POST | `/connections/discord`, `/connections/telegram` | Save or replace manual credentials |
 | DELETE | `/connections/:platform` | Disconnect one platform |
 | POST | `/uploads/video`, `/uploads/photos` | Publish selected media (`Idempotency-Key` supported) |
 | POST | `/uploads/:id/retry` | Retry failed destinations |

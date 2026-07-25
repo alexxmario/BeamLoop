@@ -24,8 +24,8 @@ displayed legal operator and email at runtime with `PUBLIC_LEGAL_NAME` and
 - Apple-signed product and transaction identifiers, subscription status and
   expiry, and the BeamLoop account identifier associated with a purchase.
 
-OAuth connections are managed through our publishing provider. Discord webhook
-and Telegram bot details entered by a user are encrypted at rest. BeamLoop does
+OAuth connections are managed through our publishing provider; BeamLoop never
+receives your password for a connected platform. BeamLoop does
 not intentionally collect contacts, precise location, advertising identifiers,
 health information, payment-card details, or cross-app tracking data.
 Apple processes App Store payments; BeamLoop never receives payment-card

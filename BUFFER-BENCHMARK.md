@@ -44,20 +44,18 @@ are modeled.
 ## What this implementation changed
 
 - One-screen publish-now, quick scheduling, and custom date/time scheduling.
-- Provider-side schedules for OAuth networks plus a durable SQLite queue for
-  Discord and Telegram.
+- Provider-side schedules held until the post's delivery time.
 - Scheduled-post status and cancellation in History.
 - Timeline, Reels, and Stories placement for Instagram and Facebook.
 - A private on-device Ideas shelf built directly into the composer.
-- Up-front X, Discord, and Telegram length validation rather than silent
+- Up-front X and LinkedIn caption-length validation rather than silent
   truncation or a late platform error.
 - Post Preflight, reusable Smart Channel Groups, and coordinated Launch Drops
   now form BeamLoop's primary workflow advantages over a conventional queue.
 - Instagram Post, Reel, and Story are first-class composer choices rather than
   a setting buried after scheduling.
-- Existing BeamLoop differentiators remain: Discord and Telegram publishing,
-  a very small compose surface, platform-specific captions, partial-failure
-  retry, and upload idempotency.
+- Existing BeamLoop differentiators remain: a very small compose surface,
+  platform-specific captions, partial-failure retry, and upload idempotency.
 
 ## Deliberately deferred
 
