@@ -32,7 +32,7 @@ const envSchema = z.object({
     .trim()
     .min(2)
     .max(120)
-    .default("Ionescu Alexandru Mario"),
+    .default("Alexandru Mario Ionescu"),
   SUPPORT_EMAIL: z.string().trim().email().default("alexionescu870@gmail.com"),
   PUBLIC_BASE_URL: z
     .string()
