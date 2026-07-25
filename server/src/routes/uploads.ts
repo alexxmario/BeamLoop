@@ -54,6 +54,13 @@ const inFlightUploads = new Set<string>();
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Ceiling and spacing for user-initiated retries. Three attempts is enough to
+// ride out a transient provider fault; beyond that the failure is structural
+// (revoked token, rejected media) and re-sending only burns the account's
+// daily platform quota.
+const RETRY_LIMIT = 3;
+const RETRY_COOLDOWN_MS = 60_000;
+
 // Drain a multipart request: files go to temp storage (so large videos are
 // never buffered in memory), fields are collected with multi-value support.
 async function collectParts(req: FastifyRequest) {
@@ -927,6 +934,34 @@ export default async function uploadRoutes(app: FastifyInstance) {
         error: "Only channels with an explicit failure can be retried.",
       });
     }
+
+    // Every retry is a fresh publish attempt against the platform, and the
+    // per-account caps are far tighter than our own plan limits: TikTok allows
+    // roughly 15-25 posts a day per creator and 6 publish requests a minute,
+    // shared across every app the creator uses. A retry button with no ceiling
+    // lets a frustrated user hammer those caps and get their account flagged,
+    // so cap the attempts and space them out.
+    const retryCount = post.retryCount ?? 0;
+    if (retryCount >= RETRY_LIMIT) {
+      return reply.code(429).send({
+        error: `This post has been retried ${RETRY_LIMIT} times already. Reconnect the channel or compose a new post rather than sending it again.`,
+        code: "RETRY_LIMIT",
+      });
+    }
+    const waitMs =
+      (post.lastRetryAt ? new Date(post.lastRetryAt).getTime() : 0) +
+      RETRY_COOLDOWN_MS -
+      Date.now();
+    if (waitMs > 0) {
+      return reply.code(429).send({
+        error: `Give the channel a moment — you can retry again in ${Math.ceil(waitMs / 1000)}s.`,
+        code: "RETRY_COOLDOWN",
+      });
+    }
+    postStore.update(post.id, {
+      retryCount: retryCount + 1,
+      lastRetryAt: new Date().toISOString(),
+    });
 
     // Claim this user-approved retry durably before the first external write.
     // A double tap, timeout, or restart will now see "pending" and cannot

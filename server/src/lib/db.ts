@@ -34,6 +34,10 @@ db.exec(`
     data TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_posts_user ON posts (userId);
+  -- The manual-delivery worker scans for due posts once a second; without this
+  -- that is a full table scan of every post ever made.
+  CREATE INDEX IF NOT EXISTS idx_posts_scheduled
+    ON posts (scheduledAt) WHERE scheduledAt IS NOT NULL;
 
   -- Discord webhook / Telegram bot credentials, stored by us (these platforms
   -- don't use OAuth and aren't handled by the posting provider).

@@ -30,8 +30,13 @@ const discordSchema = z.object({
 });
 
 const telegramSchema = z.object({
-  bot_token: z.string().min(10),
-  chat_id: z.string().min(1),
+  // The token is interpolated straight into the Bot API URL path, so constrain
+  // it to Telegram's real format (<bot_id>:<secret>) rather than accepting any
+  // string with slashes or query characters in it.
+  bot_token: z
+    .string()
+    .regex(/^\d{5,}:[A-Za-z0-9_-]{30,}$/, "That doesn't look like a bot token"),
+  chat_id: z.string().min(1).max(100),
   name: z.string().max(100).optional(),
 });
 

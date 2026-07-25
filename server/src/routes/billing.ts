@@ -120,7 +120,15 @@ export default async function billingRoutes(app: FastifyInstance) {
     }
     const signedTransaction = notification.data?.signedTransactionInfo;
     if (!signedTransaction) return reply.code(200).send();
-    const transaction = await verifyAppleTransaction(signedTransaction);
+    let transaction;
+    try {
+      transaction = await verifyAppleTransaction(signedTransaction);
+    } catch (error) {
+      // A 5xx makes Apple redeliver, and a payload we can never verify would
+      // be retried indefinitely. Reject it once instead.
+      req.log.warn({ error }, "Notification carried an unverifiable transaction");
+      return reply.code(400).send();
+    }
     const renewal = notification.data?.signedRenewalInfo
       ? await (async () => {
           // The notification itself has already established the certificate

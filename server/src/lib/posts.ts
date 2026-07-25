@@ -47,6 +47,10 @@ export interface PostRecord {
   // Provider account ids captured at acceptance time, so result webhooks can
   // resolve the correct BeamLoop channel without another provider request.
   pfmAccountPlatforms?: Record<string, string>;
+  // Publish attempts count against per-account platform caps that are much
+  // tighter than our plan limits, so retries are counted and spaced out.
+  retryCount?: number;
+  lastRetryAt?: string;
 }
 
 interface PostRow {
