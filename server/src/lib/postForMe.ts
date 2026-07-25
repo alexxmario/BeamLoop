@@ -7,9 +7,9 @@ import { config } from "../config.js";
  * Endpoint shapes verified against the official SDK
  * (github.com/DayMoonDevelopment/post-for-me-typescript) on 2026-07-20.
  *
- * Unlike Upload-Post there is NO per-user "profile" object. Each connected
- * account is tagged with `external_id` = our BeamLoop user id, which we use to
- * scope listing and posting to a single user (multi-tenant).
+ * There is no per-user "profile" object. Each connected account is tagged with
+ * `external_id` = our BeamLoop user id, which is how listing and posting stay
+ * scoped to a single user (multi-tenant).
  */
 
 // OAuth platforms BeamLoop drives through Post for Me. Discord & Telegram are
