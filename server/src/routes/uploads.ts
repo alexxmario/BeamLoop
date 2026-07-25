@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { z } from "zod";
 import { postStore, type PostRecord, type StoredMedia } from "../lib/posts.js";
+import { formatResetDate, subscriptionStore, usageForUser } from "../lib/plans.js";
 import { MEDIA_DIR, THUMBNAIL_DIR } from "../lib/paths.js";
 import {
   OAUTH_PLATFORMS,
@@ -644,7 +645,31 @@ export default async function uploadRoutes(app: FastifyInstance) {
         return reply.code(400).send({ error: "Invalid Idempotency-Key" });
       }
       const previous = postStore.findByIdempotencyKey(req.user.id, key);
-      if (previous) return { post: publicPost(previous), usage: null };
+      if (previous) {
+        const entitlement = subscriptionStore.entitlementForUser(req.user.id);
+        const usage = usageForUser(req.user.id);
+        return {
+          post: publicPost(previous),
+          usage: {
+            count: usage.postsThisMonth,
+            limit: entitlement.limits.postsPerMonth,
+            last_reset: usage.resetsAt,
+          },
+        };
+      }
+
+      const entitlement = subscriptionStore.entitlementForUser(req.user.id);
+      const initialUsage = usageForUser(req.user.id);
+      if (initialUsage.postsThisMonth >= entitlement.limits.postsPerMonth) {
+        const resetsOn = formatResetDate(initialUsage.resetsAt);
+        return reply.code(403).send({
+          error:
+            entitlement.plan === "pro"
+              ? `You've used all ${entitlement.limits.postsPerMonth} posts this month. Your limit resets on ${resetsOn}.`
+              : `You've used all ${entitlement.limits.postsPerMonth} posts this month. Your limit resets on ${resetsOn}, or upgrade for a higher limit.`,
+          code: "PLAN_LIMIT",
+        });
+      }
 
       const inFlightKey = `${req.user.id}:${key}`;
       if (inFlightUploads.has(inFlightKey)) {
@@ -696,7 +721,48 @@ export default async function uploadRoutes(app: FastifyInstance) {
         const placements = parsePlacements(fields);
         const scheduledAt = parsed.data.scheduledAt;
         const launchDrop = parsed.data.launchDrop;
+        if (platforms.length > entitlement.limits.channels) {
+          return reply.code(403).send({
+            error: `Your plan supports up to ${entitlement.limits.channels} channels per post`,
+            code: "PLAN_LIMIT",
+          });
+        }
+        if (
+          Object.keys(overrides).length > 0 &&
+          !entitlement.limits.platformCaptions
+        ) {
+          return reply.code(403).send({
+            error: "Per-platform captions require a Creator or Pro plan",
+            code: "PLAN_FEATURE",
+          });
+        }
+        if (
+          Object.keys(placements).length > 0 &&
+          !entitlement.limits.placements
+        ) {
+          return reply.code(403).send({
+            error: "Custom placements require a Creator or Pro plan",
+            code: "PLAN_FEATURE",
+          });
+        }
+        if (launchDrop && !entitlement.limits.launchDrops) {
+          return reply.code(403).send({
+            error: "Launch Drops require a Pro plan",
+            code: "PLAN_FEATURE",
+          });
+        }
         if (scheduledAt) {
+          if (initialUsage.scheduledPosts >= entitlement.limits.scheduledPosts) {
+            return reply.code(403).send({
+              // A concurrent cap, not a monthly one — publishing or deleting a
+              // queued post frees a slot immediately.
+              error:
+                entitlement.plan === "pro"
+                  ? `You already have ${entitlement.limits.scheduledPosts} posts scheduled, the most your plan allows. Publish or delete one to schedule another.`
+                  : `You already have ${entitlement.limits.scheduledPosts} posts scheduled, the most your plan allows. Publish or delete one to free a slot, or upgrade to schedule more.`,
+              code: "PLAN_LIMIT",
+            });
+          }
           const delay = new Date(scheduledAt).getTime() - Date.now();
           if (delay < 5 * 60 * 1000) {
             return reply.code(400).send({ error: "Schedule at least 5 minutes from now" });
@@ -800,7 +866,15 @@ export default async function uploadRoutes(app: FastifyInstance) {
         }
 
         const stored = postStore.findById(post.id)!;
-        return { post: publicPost(stored), usage: null };
+        const finalUsage = usageForUser(req.user.id);
+        return {
+          post: publicPost(stored),
+          usage: {
+            count: finalUsage.postsThisMonth,
+            limit: entitlement.limits.postsPerMonth,
+            last_reset: finalUsage.resetsAt,
+          },
+        };
       } finally {
         await cleanup(files);
         inFlightUploads.delete(inFlightKey);
@@ -991,9 +1065,16 @@ export default async function uploadRoutes(app: FastifyInstance) {
     await refreshPending(req.user.id, req.user.socialExternalId).catch((err) =>
       app.log.warn({ err }, "Provider status refresh failed")
     );
+    const { limits } = subscriptionStore.entitlementForUser(req.user.id);
+    const cutoff = limits.historyDays
+      ? Date.now() - limits.historyDays * 24 * 60 * 60 * 1000
+      : null;
     return {
       posts: postStore
         .listByUser(req.user.id)
+        .filter(
+          (post) => cutoff === null || new Date(post.createdAt).getTime() >= cutoff
+        )
         .map(publicPost),
     };
   });

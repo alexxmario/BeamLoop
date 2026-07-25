@@ -34,6 +34,33 @@ function HistoryIcon({ color }: { color: string }) {
   );
 }
 
+function PlansIcon({ color }: { color: string }) {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+function LibraryIcon({ color }: { color: string }) {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 5.5C4 4.7 4.7 4 5.5 4H11v16H5.5C4.7 20 4 19.3 4 18.5zM20 5.5C20 4.7 19.3 4 18.5 4H13v16h5.5c.8 0 1.5-.7 1.5-1.5z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // The design's tab bar: blurred console tint, mono labels, and the
 // signature center transmit FAB (opens Compose as a modal).
 function BeamTabBar({ state, navigation }: BottomTabBarProps) {
@@ -42,6 +69,8 @@ function BeamTabBar({ state, navigation }: BottomTabBarProps) {
 
   const tabs = [
     { route: "connections", label: "ACCOUNTS", Icon: AccountsIcon },
+    { route: "plans", label: "PLANS", Icon: PlansIcon },
+    { route: "library", label: "LIBRARY", Icon: LibraryIcon },
     { route: "history", label: "HISTORY", Icon: HistoryIcon },
   ];
 
@@ -65,9 +94,9 @@ function BeamTabBar({ state, navigation }: BottomTabBarProps) {
           borderTopColor: palette.borderFaint,
           flexDirection: "row",
           alignItems: "flex-start",
-          justifyContent: "space-around",
+          justifyContent: "center",
           paddingTop: 12,
-          paddingHorizontal: 26,
+          paddingHorizontal: 8,
         }}
       >
         {tabs.map(({ route, label, Icon }, i) => {
@@ -78,7 +107,16 @@ function BeamTabBar({ state, navigation }: BottomTabBarProps) {
             <Pressable
               key={route}
               onPress={() => navigation.navigate(route)}
-              style={{ alignItems: "center", gap: 5, width: 80 }}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: focused }}
+              accessibilityLabel={label.toLocaleLowerCase()}
+              style={{
+                alignItems: "center",
+                gap: 5,
+                flex: 1,
+                maxWidth: 68,
+                ...(i === 1 ? { marginRight: sizes.fab + 8 } : {}),
+              }}
             >
               <Icon color={color} />
               <Text
@@ -132,6 +170,8 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="connections" />
+      <Tabs.Screen name="plans" />
+      <Tabs.Screen name="library" />
       <Tabs.Screen name="history" />
     </Tabs>
   );

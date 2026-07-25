@@ -45,6 +45,27 @@ db.exec(`
     createdAt TEXT NOT NULL,
     PRIMARY KEY (userId, platform)
   );
+
+  -- Verified StoreKit subscription state. We never receive or store payment
+  -- card details; Apple is the merchant and signs every transaction update.
+  CREATE TABLE IF NOT EXISTS apple_subscriptions (
+    originalTransactionId TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    transactionId TEXT NOT NULL,
+    productId TEXT NOT NULL,
+    environment TEXT NOT NULL,
+    status TEXT NOT NULL,
+    expiresAt TEXT,
+    autoRenewStatus INTEGER,
+    updatedAt TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_apple_subscriptions_user
+    ON apple_subscriptions (userId);
+
+  CREATE TABLE IF NOT EXISTS apple_notifications (
+    notificationUUID TEXT PRIMARY KEY,
+    receivedAt TEXT NOT NULL
+  );
 `);
 
 // Existing installations created the posts table before idempotency support.

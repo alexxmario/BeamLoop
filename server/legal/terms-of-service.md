@@ -18,6 +18,20 @@ A destination may reject, delay, modify, restrict, or remove a post. BeamLoop
 cannot guarantee acceptance, timing, reach, or continued availability of
 third-party services.
 
+## Plans and App Store subscriptions
+
+BeamLoop offers a free plan and auto-renewable Creator and Pro subscriptions.
+Before purchase, the app displays the localized price, billing period, feature
+access, and usage limits. Payment is charged to the user's Apple ID. A
+subscription renews automatically unless canceled at least 24 hours before the
+current period ends; Apple may charge the renewal within 24 hours before that
+period ends.
+
+Subscriptions can be managed or canceled in App Store account settings.
+Upgrades and downgrades follow the timing Apple displays during confirmation,
+and Apple handles refund requests under its policies. Deleting a BeamLoop
+account or uninstalling the app does not cancel an Apple subscription.
+
 ## Content and acceptable use
 
 Users retain ownership of their content and grant BeamLoop a limited,

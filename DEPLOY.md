@@ -32,6 +32,8 @@ The backend is a Node/Fastify server in `server/`. It stores data in SQLite
    | `SUPPORT_EMAIL` | monitored address shown to users and App Review |
    | `PUBLIC_BASE_URL` | `https://beamloop-production.up.railway.app` |
    | `APP_STORE_URL` | optional; add the listing URL after release |
+   | `APPLE_BUNDLE_ID` | `com.beamloop.app` |
+   | `APPLE_APP_ID` | `6794000898` |
 
    Railway sets `PORT` automatically — the server already reads it.
 5. **Deploy**, then note the public URL Railway gives you (e.g.
@@ -77,7 +79,33 @@ eas submit --profile production --platform ios
 build. Use `--profile preview` for an internal-distribution build to test on
 your own device before the store build.
 
-## 5. App Store listing & compliance
+`expo-iap` contains native StoreKit code, so subscriptions cannot be tested in
+Expo Go. Use a development/preview build with a Sandbox Apple account or
+TestFlight.
+
+## 5. Configure subscriptions in App Store Connect
+
+Create one auto-renewable subscription group named **BeamLoop Plans**. Put Pro
+above Creator in the group's service-level order, then create these products:
+
+| Reference name | Product ID | Suggested U.S. price |
+| --- | --- | --- |
+| Creator Monthly | `com.beamloop.app.creator.monthly` | $4.99/month |
+| Creator Yearly | `com.beamloop.app.creator.yearly` | $49.99/year |
+| Pro Monthly | `com.beamloop.app.pro.monthly` | $9.99/month |
+| Pro Yearly | `com.beamloop.app.pro.yearly` | $99.99/year |
+
+Add localized display names/descriptions and submit all four products with app
+version 1.0. The first subscription must accompany a new app version.
+
+Under App Store Server Notifications, set both Production and Sandbox URLs to:
+`https://beamloop-production.up.railway.app/webhooks/apple`
+
+Choose Version 2 notifications. No app-specific shared secret is required for
+this StoreKit 2/JWS implementation. The app must show Apple's localized price,
+so confirm all products are returned in a TestFlight build before review.
+
+## 6. App Store listing & compliance
 
 - **Privacy policy URL** (required):
   `https://beamloop-production.up.railway.app/legal/privacy`
@@ -89,9 +117,10 @@ your own device before the store build.
   `https://beamloop-production.up.railway.app/legal/terms`
 - Confirm `PUBLIC_LEGAL_NAME` and `SUPPORT_EMAIL` in Railway show the exact
   identity and working inbox you want customers and Apple to use.
-- **App Privacy questionnaire** in App Store Connect: declare email + connected
-  account credentials as collected, used for app functionality, not for
-  tracking.
+- **App Privacy questionnaire** in App Store Connect: declare email, connected
+  account credentials, user content, product interaction, and purchase history
+  as collected for app functionality, not for tracking. BeamLoop does not
+  collect payment information; Apple processes it.
 - **Account deletion**: already implemented in-app (Connections tab → Delete
   account) — Apple checks for this (Guideline 5.1.1(v)).
 - **Encryption**: `usesNonExemptEncryption: false` is already set, so the
@@ -99,9 +128,12 @@ your own device before the store build.
 - Screenshots (6.7" and 6.5" iPhone), description, keywords, support URL, and
   the age-rating questionnaire.
 
-## 6. Smoke-test in a real build
+## 7. Smoke-test in a real build
 
 The `beamloop://connections/callback` OAuth redirect only fully works in a
 real build (not Expo Go). After the `preview` build installs, connect one
 OAuth platform end-to-end and confirm the browser sheet closes and the
 connection flips to LIVE.
+Purchase each plan in Sandbox, confirm server limits change, restore on another
+device signed into the same BeamLoop account, test upgrade/downgrade, cancel
+renewal, and confirm the notification endpoint updates entitlement at expiry.

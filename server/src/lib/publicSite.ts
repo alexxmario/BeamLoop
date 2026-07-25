@@ -406,6 +406,7 @@ export function supportPage() {
         <details><summary>How do I cancel a scheduled post?</summary><p>Open History, select Scheduled, then cancel the item before its delivery time. A post already accepted or published by a destination may need to be removed directly on that platform.</p></details>
         <details><summary>Where is my media stored?</summary><p>Media is held only as needed to deliver or retry your post. Scheduled media is retained until delivery, and retry media is removed within seven days afterward.</p></details>
         <details><summary>How do I disconnect a social account?</summary><p>Open Connections, tap the connected platform, and choose Disconnect. BeamLoop removes its stored connection and can no longer publish to it.</p></details>
+        <details><summary>How do I manage or cancel my subscription?</summary><p>Open Accounts, choose Plans, then Manage Subscription. Apple handles payment and cancellation. Deleting your BeamLoop account or removing the app does not cancel an active App Store subscription.</p></details>
         <h2>Contact</h2>
         <p>BeamLoop is operated by ${legalName}. Email <a href="${supportHref}">${supportEmail}</a>. We aim to acknowledge support and privacy requests within two business days.</p>
       </section>`,
@@ -434,6 +435,7 @@ export function accountDeletionPage() {
         <h2>What deletion removes</h2>
         <p>Your BeamLoop login, connection records, encrypted manual credentials, post history, scheduled posts, and retained media are removed. We also request cancellation or deletion of provider-scheduled posts where supported.</p>
         <p>Content already published to Instagram, TikTok, YouTube, Facebook, X, Threads, Discord, Telegram, or another destination remains under that platform's control. Delete that content from the destination itself.</p>
+        <div class="notice"><strong>Apple subscriptions are separate.</strong> Deleting your BeamLoop account does not cancel an App Store subscription. Before deletion, open Plans in BeamLoop and choose Manage Subscription if you want to stop renewal.</div>
         <div class="notice">If you cannot access the app, email <a href="${supportHref}?subject=BeamLoop%20account%20deletion">${supportEmail}</a> from your BeamLoop account email. We may ask you to verify ownership before deletion.</div>
       </article>`,
   });
@@ -459,6 +461,7 @@ export function privacyPage() {
           <li><strong>Connected accounts:</strong> identifiers and authorization needed to publish to accounts you connect. OAuth connections are managed through our publishing provider. Discord webhook and Telegram bot details you enter are encrypted at rest.</li>
           <li><strong>Content and instructions:</strong> photos, videos, captions, titles, destination selections, placement choices, and scheduled delivery times.</li>
           <li><strong>Service data:</strong> request timestamps, delivery status, IP-derived security information, and error logs needed to protect and operate the service.</li>
+          <li><strong>Subscription data:</strong> Apple-signed product and transaction identifiers, subscription status and expiry, and the BeamLoop account identifier attached to a purchase. Apple processes payment; BeamLoop does not receive your payment-card details.</li>
         </ul>
         <p>We do not intentionally collect your contacts, precise location, advertising identifier, health information, payment-card details, or cross-app tracking data.</p>
         <h2>3. How we use data</h2>
@@ -468,6 +471,7 @@ export function privacyPage() {
           <li><strong>Post for Me</strong>, our publishing infrastructure provider, receives the content and authorization required to deliver posts.</li>
           <li><strong>Your selected destinations</strong> receive the content you ask BeamLoop to publish and handle it under their own terms and privacy policies.</li>
           <li><strong>Railway</strong> provides hosting and infrastructure used to operate the BeamLoop service.</li>
+          <li><strong>Apple</strong> processes App Store purchases, renewals, cancellations, and refunds under Apple's terms and privacy policy.</li>
           <li><strong>Authorities or professional advisers</strong> may receive limited information when required by law or necessary to protect legal rights and service security.</li>
         </ul>
         <p>We do not sell personal data or share it for targeted advertising.</p>
@@ -511,15 +515,18 @@ export function termsPage() {
         <p>Do not use BeamLoop for unlawful, deceptive, infringing, abusive, hateful, harassing, exploitative, or malicious activity; unsolicited spam; platform manipulation; credential theft; security attacks; or content that violates a destination's rules. Do not interfere with, overload, reverse-engineer, or bypass limits protecting the service.</p>
         <h2>6. Connected services</h2>
         <p>Your use of each destination remains governed by that service's terms. A destination may reject, delay, modify, restrict, or remove a post. BeamLoop cannot guarantee acceptance, timing, reach, or continued availability of third-party services.</p>
-        <h2>7. Availability</h2>
+        <h2>7. Plans and App Store subscriptions</h2>
+        <p>BeamLoop offers a free plan and auto-renewable Creator and Pro subscriptions. The app shows the current localized price, billing period, and included limits before purchase. Payment is charged to your Apple ID. Your subscription renews automatically unless you cancel at least 24 hours before the end of the current period. Apple may charge the renewal within 24 hours before that period ends.</p>
+        <p>Manage or cancel in your App Store account settings. Upgrades and downgrades follow the timing Apple shows during confirmation. Refund requests are handled by Apple under its policies. Deleting your BeamLoop account or uninstalling the app does not cancel your Apple subscription. Paid access requires a verified, active App Store entitlement; published content may remain on destination platforms after access ends.</p>
+        <h2>8. Availability</h2>
         <p>We work to keep BeamLoop reliable but provide it on an "as available" basis. Maintenance, network conditions, provider incidents, and platform policy changes can interrupt delivery. Review critical posts and destination results yourself.</p>
-        <h2>8. Suspension and termination</h2>
+        <h2>9. Suspension and termination</h2>
         <p>You may stop using BeamLoop and delete your account at any time. We may restrict or terminate access when reasonably necessary to address abuse, security risk, legal requirements, nonpayment for a future paid service, or a material breach of these Terms.</p>
-        <h2>9. Disclaimers and liability</h2>
+        <h2>10. Disclaimers and liability</h2>
         <p>To the extent allowed by law, BeamLoop is provided without implied warranties and is not liable for indirect, incidental, special, consequential, or punitive losses, including lost reach, revenue, or opportunity. Nothing in these Terms excludes rights or liability that cannot legally be excluded.</p>
-        <h2>10. Changes</h2>
+        <h2>11. Changes</h2>
         <p>We may update the service or these Terms. The effective date will change when we do. If a material change requires consent or notice under applicable law, we will provide it before the change takes effect.</p>
-        <h2>11. Contact</h2>
+        <h2>12. Contact</h2>
         <p>Questions about these Terms can be sent to <a href="${supportHref}">${supportEmail}</a>.</p>
       </article>`,
   });

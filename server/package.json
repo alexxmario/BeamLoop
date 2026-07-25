@@ -11,9 +11,11 @@
     "test:provider-contract": "node scripts/provider-contract-check.mjs",
     "test:webhook-contract": "node scripts/webhook-contract-check.mjs",
     "test:history-contract": "node scripts/history-contract-check.mjs",
+    "test:billing-contract": "npm run build && node scripts/billing-contract-check.mjs",
     "release:check": "node scripts/release-check.mjs"
   },
   "dependencies": {
+    "@apple/app-store-server-library": "^3.1.0",
     "@fastify/cors": "^11.0.0",
     "@fastify/multipart": "^10.0.0",
     "@fastify/rate-limit": "^11.1.0",

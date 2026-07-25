@@ -13,6 +13,7 @@ import {
   isReconnectError,
   type Platform,
 } from "../lib/platforms.js";
+import { subscriptionStore, usageForUser } from "../lib/plans.js";
 
 const linkSchema = z.object({
   platforms: z.array(z.enum([...OAUTH_PLATFORMS, ...MANUAL_PLATFORMS])).optional(),
@@ -38,6 +39,47 @@ const platformSchema = z.enum([...OAUTH_PLATFORMS, ...MANUAL_PLATFORMS]);
 
 export default async function connectionRoutes(app: FastifyInstance) {
   app.addHook("preHandler", (req, reply) => app.requireAuth(req, reply));
+
+  async function connectionLimitReached(
+    userId: string,
+    socialExternalId: string,
+    targetPlatform?: Platform
+  ) {
+    const entitlement = subscriptionStore.entitlementForUser(userId);
+    const accounts = await postForMe.listAccounts(socialExternalId);
+    const oauthCount = new Set(
+      accounts
+        .filter((account) => account.status === "connected")
+        .map((account) => account.platform)
+    ).size;
+    if (
+      targetPlatform &&
+      accounts.some(
+        (account) =>
+          account.status === "connected" && account.platform === targetPlatform
+      )
+    ) {
+      return false;
+    }
+    return (
+      oauthCount + usageForUser(userId).manualConnections >=
+      entitlement.limits.channels
+    );
+  }
+
+  // Names the limit and the way out. Pro includes every platform we support, so
+  // its branch is effectively unreachable — but "upgrade" must never be
+  // suggested to someone already on the top plan.
+  function channelLimitError(userId: string) {
+    const { plan, limits } = subscriptionStore.entitlementForUser(userId);
+    return {
+      error:
+        plan === "pro"
+          ? `Your plan includes all ${limits.channels} channels. Disconnect one to connect a different account.`
+          : `Your plan includes ${limits.channels} channels. Disconnect one, or upgrade to connect more.`,
+      code: "PLAN_LIMIT",
+    };
+  }
 
   // Current connection status for every platform we support. OAuth platforms
   // come from Post for Me (scoped by external_id = our user id); Discord &
@@ -113,6 +155,15 @@ export default async function connectionRoutes(app: FastifyInstance) {
     if (!platform) {
       return reply.code(400).send({ error: "Pick one OAuth platform to connect" });
     }
+    if (
+      await connectionLimitReached(
+        req.user.id,
+        req.user.socialExternalId,
+        platform
+      )
+    ) {
+      return reply.code(403).send(channelLimitError(req.user.id));
+    }
 
     const { url } = await postForMe.createAuthUrl(req.user.socialExternalId, platform);
     return { access_url: url, duration: "" };
@@ -123,6 +174,12 @@ export default async function connectionRoutes(app: FastifyInstance) {
     const body = discordSchema.safeParse(req.body);
     if (!body.success) {
       return reply.code(400).send({ error: body.error.issues[0]?.message });
+    }
+    if (
+      !manualStore.get(req.user.id, "discord") &&
+      (await connectionLimitReached(req.user.id, req.user.socialExternalId))
+    ) {
+      return reply.code(403).send(channelLimitError(req.user.id));
     }
     try {
       await validateDiscordWebhook(body.data.webhook_url);
@@ -138,6 +195,12 @@ export default async function connectionRoutes(app: FastifyInstance) {
     const body = telegramSchema.safeParse(req.body);
     if (!body.success) {
       return reply.code(400).send({ error: body.error.issues[0]?.message });
+    }
+    if (
+      !manualStore.get(req.user.id, "telegram") &&
+      (await connectionLimitReached(req.user.id, req.user.socialExternalId))
+    ) {
+      return reply.code(403).send(channelLimitError(req.user.id));
     }
     try {
       await validateTelegramCredentials(body.data.bot_token, body.data.chat_id);

@@ -6,7 +6,19 @@ import type {
   PostRecord,
   SessionUser,
   UploadUsage,
+  BillingStatus,
 } from "./types";
+
+export async function fetchBillingStatus() {
+  return api<BillingStatus>("/billing/status");
+}
+
+export async function validateAppleTransaction(signedTransaction: string) {
+  return api<BillingStatus>("/billing/apple/transaction", {
+    method: "POST",
+    body: { signedTransaction },
+  });
+}
 
 interface AuthResponse {
   token: string;

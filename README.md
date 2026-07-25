@@ -75,6 +75,9 @@ development or preview build, not Expo Go.
 | DELETE | `/uploads/:id` | Cancel a future scheduled post |
 | GET | `/uploads/history` | Post status and retry history |
 | POST | `/webhooks/post-for-me` | Verified provider result confirmations |
+| GET | `/billing/status` | Verified plan entitlement and usage |
+| POST | `/billing/apple/transaction` | Verify and attach a StoreKit 2 transaction |
+| POST | `/webhooks/apple` | App Store Server Notifications V2 |
 
 ## Deployment
 

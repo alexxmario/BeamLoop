@@ -187,12 +187,7 @@ export default function HistoryScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.console }} edges={["top"]}>
       <View style={{ paddingHorizontal: spacing.xxl, paddingTop: 10, paddingBottom: spacing.md }}>
-        <View style={[s.row, { justifyContent: "space-between" }]}>
-          <Text style={{ ...type.displayTitle, color: palette.text }}>History</Text>
-          <Pressable onPress={() => router.push("/library")} hitSlop={8}>
-            <Text style={{ ...type.monoMeta, color: palette.signal }}>LIBRARY ›</Text>
-          </Pressable>
-        </View>
+        <Text style={{ ...type.displayTitle, color: palette.text }}>History</Text>
         <View style={[s.row, { gap: spacing.sm, marginTop: spacing.rowPad, flexWrap: "wrap" }]}> 
           <FilterChip
             label="All"

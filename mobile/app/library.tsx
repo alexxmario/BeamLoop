@@ -45,7 +45,7 @@ import {
 
 type Section = "ideas" | "collections";
 
-export default function LibraryScreen() {
+export default function LibraryScreen({ tabMode = false }: { tabMode?: boolean }) {
   const router = useRouter();
   const { user } = useAuth();
   const [section, setSection] = useState<Section>("ideas");
@@ -177,10 +177,17 @@ export default function LibraryScreen() {
             paddingBottom: spacing.lg,
           }}
         >
-          <View style={[s.row, { justifyContent: "space-between" }]}>
-            <Pressable onPress={() => router.back()} hitSlop={10}>
-              <Text style={{ ...type.monoNav, color: palette.textMono }}>‹ BACK</Text>
-            </Pressable>
+          <View
+            style={[
+              s.row,
+              { justifyContent: tabMode ? "flex-end" : "space-between" },
+            ]}
+          >
+            {!tabMode && (
+              <Pressable onPress={() => router.back()} hitSlop={10}>
+                <Text style={{ ...type.monoNav, color: palette.textMono }}>‹ BACK</Text>
+              </Pressable>
+            )}
             <Pressable onPress={() => router.push("/compose")} hitSlop={10}>
               <Text style={{ ...type.monoNav, color: palette.signal }}>NEW POST +</Text>
             </Pressable>
@@ -239,7 +246,7 @@ export default function LibraryScreen() {
           contentContainerStyle={{
             paddingHorizontal: spacing.screenX,
             paddingTop: spacing.sm,
-            paddingBottom: spacing.xxl,
+            paddingBottom: tabMode ? 140 : spacing.xxl,
             gap: spacing.md,
           }}
         >

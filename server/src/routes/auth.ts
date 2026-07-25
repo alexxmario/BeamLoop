@@ -8,6 +8,7 @@ import { MEDIA_DIR, THUMBNAIL_DIR } from "../lib/paths.js";
 import { signSessionToken } from "../plugins/auth.js";
 import { postForMe } from "../lib/postForMe.js";
 import { manualStore } from "../lib/manualConnections.js";
+import { subscriptionStore } from "../lib/plans.js";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -123,6 +124,7 @@ export default async function authRoutes(app: FastifyInstance) {
         }
       }
 
+      subscriptionStore.deleteByUser(userId);
       userStore.delete(userId);
       return reply.code(204).send();
     }

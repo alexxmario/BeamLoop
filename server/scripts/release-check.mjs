@@ -60,6 +60,21 @@ for (const name of ["privacy-policy.md", "terms-of-service.md"]) {
   }
 }
 
+for (const name of ["AppleRootCA-G2.cer", "AppleRootCA-G3.cer"]) {
+  if (!existsSync(resolve(serverDir, "certs", name))) {
+    fail(`Missing Apple transaction verification root: server/certs/${name}`);
+  }
+}
+
+const mobilePackage = read(resolve(mobileDir, "package.json"));
+const mobileAppConfig = read(resolve(mobileDir, "app.json"));
+if (!mobilePackage.includes('"expo-iap"')) {
+  fail("mobile/package.json must include expo-iap.");
+}
+if (!mobileAppConfig.includes('"expo-iap"')) {
+  fail("mobile/app.json must include the expo-iap config plugin.");
+}
+
 const easRaw = read(resolve(mobileDir, "eas.json"));
 try {
   const eas = JSON.parse(easRaw);

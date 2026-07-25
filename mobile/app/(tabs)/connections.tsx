@@ -214,11 +214,16 @@ export default function ConnectionsScreen() {
   const confirmDeleteAccount = () => {
     Alert.alert(
       "Delete account",
-      "This permanently deletes your BeamLoop account, disconnects every linked platform, and erases your post history. This can't be undone.",
+      "This permanently deletes your BeamLoop account, connected platforms, and post history. Deleting BeamLoop does not cancel an Apple subscription; cancel it in the App Store first if you no longer want it to renew.",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Delete",
+          text: "Manage subscription",
+          onPress: () =>
+            void Linking.openURL("https://apps.apple.com/account/subscriptions"),
+        },
+        {
+          text: "Delete anyway",
           style: "destructive",
           onPress: async () => {
             try {
@@ -264,17 +269,6 @@ export default function ConnectionsScreen() {
             Accounts
           </Text>
           <View style={[s.row, { gap: spacing.lg }]}>
-            <Pressable onPress={() => router.push("/library")} hitSlop={8}>
-              <Text
-                style={{
-                  ...type.monoMeta,
-                  color: palette.signal,
-                  letterSpacing: tracking(monoTracking.wide, type.monoMeta.fontSize),
-                }}
-              >
-                LIBRARY
-              </Text>
-            </Pressable>
             <Pressable onPress={signOut} hitSlop={8}>
               <Text
                 style={{

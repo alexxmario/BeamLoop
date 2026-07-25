@@ -62,6 +62,34 @@ export interface UploadUsage {
   last_reset: string;
 }
 
+export type PlanId = "free" | "creator" | "pro";
+
+export interface BillingStatus {
+  entitlement: {
+    plan: PlanId;
+    productId: string | null;
+    status: string;
+    expiresAt: string | null;
+    willRenew: boolean | null;
+    limits: {
+      channels: number;
+      postsPerMonth: number;
+      scheduledPosts: number;
+      ideas: number | null;
+      historyDays: number | null;
+      platformCaptions: boolean;
+      placements: boolean;
+      launchDrops: boolean;
+    };
+  };
+  usage: {
+    postsThisMonth: number;
+    scheduledPosts: number;
+    manualConnections: number;
+    resetsAt: string;
+  };
+}
+
 export const PLATFORM_LABELS: Record<Platform, string> = {
   tiktok: "TikTok",
   instagram: "Instagram",

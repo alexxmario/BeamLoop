@@ -27,13 +27,26 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().optional(),
   // Public website details. Override these in Railway with the exact legal
   // operator and monitored support inbox used for the App Store listing.
-  PUBLIC_LEGAL_NAME: z.string().trim().min(2).max(120).default("Alex Ionescu"),
+  PUBLIC_LEGAL_NAME: z
+    .string()
+    .trim()
+    .min(2)
+    .max(120)
+    .default("Ionescu Alexandru Mario"),
   SUPPORT_EMAIL: z.string().trim().email().default("alexionescu870@gmail.com"),
   PUBLIC_BASE_URL: z
     .string()
     .url()
     .default("https://beamloop-production.up.railway.app"),
   APP_STORE_URL: z.string().url().optional(),
+  // StoreKit 2 / App Store Server API. Transaction JWS verification only
+  // needs the public app identifiers; the private API key is optional and is
+  // reserved for server-to-server reconciliation jobs.
+  APPLE_BUNDLE_ID: z.string().default("com.beamloop.app"),
+  APPLE_APP_ID: z.coerce.number().int().positive().default(6794000898),
+  APPLE_IAP_ISSUER_ID: z.string().uuid().optional(),
+  APPLE_IAP_KEY_ID: z.string().min(1).optional(),
+  APPLE_IAP_PRIVATE_KEY: z.string().min(1).optional(),
   // Retry media is useful only briefly. Keep it long enough for a user to
   // recover a failed delivery, then remove it automatically.
   MEDIA_RETENTION_HOURS: z.coerce.number().int().min(1).max(720).default(168),
@@ -46,6 +59,18 @@ if (!parsed.success) {
   for (const issue of parsed.error.issues) {
     console.error(`  ${issue.path.join(".")}: ${issue.message}`);
   }
+  process.exit(1);
+}
+
+const appleApiValues = [
+  parsed.data?.APPLE_IAP_ISSUER_ID,
+  parsed.data?.APPLE_IAP_KEY_ID,
+  parsed.data?.APPLE_IAP_PRIVATE_KEY,
+];
+if (parsed.success && appleApiValues.some(Boolean) && !appleApiValues.every(Boolean)) {
+  console.error(
+    "Invalid environment configuration: APPLE_IAP_ISSUER_ID, APPLE_IAP_KEY_ID, and APPLE_IAP_PRIVATE_KEY must be set together"
+  );
   process.exit(1);
 }
 

@@ -32,6 +32,7 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      "expo-iap",
       [
         "expo-image-picker",
         {
@@ -41,6 +42,13 @@
       ],
       "expo-font",
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "26f75d01-dadf-4615-a29f-b154dc148d2f"
+      }
+    },
+    "owner": "beamloop"
   }
 }

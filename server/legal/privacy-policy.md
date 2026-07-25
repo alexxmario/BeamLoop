@@ -21,11 +21,15 @@ displayed legal operator and email at runtime with `PUBLIC_LEGAL_NAME` and
   scheduled delivery times supplied by the user.
 - Request timestamps, delivery status, security information, and error logs
   needed to operate and protect the service.
+- Apple-signed product and transaction identifiers, subscription status and
+  expiry, and the BeamLoop account identifier associated with a purchase.
 
 OAuth connections are managed through our publishing provider. Discord webhook
 and Telegram bot details entered by a user are encrypted at rest. BeamLoop does
 not intentionally collect contacts, precise location, advertising identifiers,
 health information, payment-card details, or cross-app tracking data.
+Apple processes App Store payments; BeamLoop never receives payment-card
+details.
 
 ## Use and sharing
 
@@ -38,6 +42,8 @@ Railway provides hosting. Selected social and community destinations receive
 the content the user asks BeamLoop to publish. We may disclose limited
 information when required by law or necessary to protect legal rights and
 service security.
+Apple processes purchases, renewals, cancellations, and refunds under its own
+terms and privacy policy.
 
 We do not sell personal data or share it for targeted advertising.
 
@@ -53,6 +59,8 @@ account inside the app. Account deletion removes BeamLoop-held account data,
 connection records, schedules, history, and retained media, except information
 temporarily required for security or legal obligations. Content already
 published is controlled by the destination and must be removed there.
+Deleting a BeamLoop account does not cancel an App Store subscription; users
+can manage or cancel renewal in their App Store account settings.
 
 Depending on location, a user may also request access, correction, portability,
 restriction, objection, or deletion by emailing
