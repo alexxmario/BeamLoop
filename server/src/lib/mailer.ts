@@ -1,17 +1,19 @@
 import { config } from "../config.js";
 
 /**
- * Transactional email over Resend's HTTP API (https://resend.com/docs).
+ * Transactional email over Brevo's HTTP API
+ * (https://developers.brevo.com/reference/sendtransacemail).
  *
- * Deliberately not an SDK: one POST is the whole integration, and a
- * dependency-free client is easier to swap if the provider changes.
+ * Brevo rather than a domain-based provider because it verifies an individual
+ * sender address, so password resets work without owning a domain. Swapping
+ * providers means changing this one request — nothing else calls out.
  *
  * When no API key is configured the message is logged instead of sent, so
- * local development and CI work without credentials and a missing key can
- * never silently drop a reset a user is waiting on — it appears in the logs.
+ * local development and CI work without credentials and a misconfiguration is
+ * visible rather than silently swallowing a reset someone is waiting on.
  */
 
-const RESEND_URL = "https://api.resend.com/emails";
+const BREVO_URL = "https://api.brevo.com/v3/smtp/email";
 const SEND_TIMEOUT_MS = 15_000;
 
 export interface Mail {
@@ -21,32 +23,42 @@ export interface Mail {
   text: string;
 }
 
-export const mailerConfigured = () => Boolean(config.RESEND_API_KEY);
+export const mailerConfigured = () => Boolean(config.BREVO_API_KEY);
+
+/** Split `Name <address@example.com>` into Brevo's sender shape. */
+function sender(): { name: string; email: string } {
+  const raw = config.MAIL_FROM.trim();
+  const match = raw.match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
+  if (match?.[2]) return { name: match[1] || "BeamLoop", email: match[2].trim() };
+  return { name: "BeamLoop", email: raw };
+}
 
 export async function sendMail(
   mail: Mail,
   log?: { info: (o: unknown, m: string) => void; error: (o: unknown, m: string) => void }
 ): Promise<boolean> {
-  if (!config.RESEND_API_KEY) {
+  if (!config.BREVO_API_KEY) {
     log?.info(
       { to: mail.to, subject: mail.subject, text: mail.text },
-      "Email not sent: RESEND_API_KEY is not configured"
+      "Email not sent: BREVO_API_KEY is not configured"
     );
     return false;
   }
   try {
-    const res = await fetch(RESEND_URL, {
+    const res = await fetch(BREVO_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${config.RESEND_API_KEY}`,
+        // Brevo authenticates with a bare header, not a bearer token.
+        "api-key": config.BREVO_API_KEY,
         "Content-Type": "application/json",
+        accept: "application/json",
       },
       body: JSON.stringify({
-        from: config.MAIL_FROM,
-        to: [mail.to],
+        sender: sender(),
+        to: [{ email: mail.to }],
         subject: mail.subject,
-        html: mail.html,
-        text: mail.text,
+        htmlContent: mail.html,
+        textContent: mail.text,
       }),
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });

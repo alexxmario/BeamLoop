@@ -39,11 +39,13 @@ const envSchema = z.object({
     .url()
     .default("https://beamloop-production.up.railway.app"),
   APP_STORE_URL: z.string().url().optional(),
-  // Transactional email (password resets), sent through Resend. Without a key
+  // Transactional email (password resets), sent through Brevo. Without a key
   // the reset link is written to the server log instead of being emailed, so
   // local development works and a misconfiguration is visible rather than silent.
-  RESEND_API_KEY: z.string().min(1).optional(),
-  MAIL_FROM: z.string().default("BeamLoop <onboarding@resend.dev>"),
+  BREVO_API_KEY: z.string().min(1).optional(),
+  // Must be an address verified under Brevo -> Senders. Brevo verifies an
+  // individual address, so this works without owning a domain.
+  MAIL_FROM: z.string().default("BeamLoop <beamlooptest@gmail.com>"),
   // StoreKit 2 / App Store Server API. Transaction JWS verification only
   // needs the public app identifiers; the private API key is optional and is
   // reserved for server-to-server reconciliation jobs.
