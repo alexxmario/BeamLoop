@@ -9,11 +9,17 @@ import {
 } from "@expo-google-fonts/jetbrains-mono";
 import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { View } from "react-native";
 import { AuthProvider, useAuth } from "../src/auth/AuthContext";
 import { palette } from "../src/theme";
+
+// Hold the native splash until the display fonts are ready. Without this the
+// launch sequence flashes an empty screen between the splash and the first
+// frame that can actually be typeset.
+void SplashScreen.preventAutoHideAsync();
 
 // Screen groups that require a signed-in user.
 const PROTECTED_GROUPS = ["(tabs)", "compose", "connect", "connections", "library", "plans"];
@@ -39,7 +45,7 @@ function AuthGate() {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Archivo_400Regular,
     Archivo_600SemiBold,
     Archivo_700Bold,
@@ -50,19 +56,16 @@ export default function RootLayout() {
     "ArchivoExpanded-ExtraBold": require("../assets/fonts/ArchivoExpanded-ExtraBold.ttf"),
   });
 
-  if (!fontsLoaded) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: palette.console,
-        }}
-      >
-        <ActivityIndicator color={palette.signal} />
-      </View>
-    );
+  useEffect(() => {
+    // Font loading can also fail; either way we must let the splash go, or the
+    // app would sit on it forever.
+    if (fontsLoaded || fontError) void SplashScreen.hideAsync();
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) {
+    // The native splash is still up; render a matching surface so there is no
+    // pale frame underneath it.
+    return <View style={{ flex: 1, backgroundColor: palette.console }} />;
   }
 
   return (

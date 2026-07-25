@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -114,7 +114,9 @@ export default function HistoryScreen() {
     return () => clearTimeout(timer);
   }, [nextScheduledAt, load]);
 
-  const retry = async (post: PostRecord) => {
+  // These are handed to memoized rows, so they have to keep a stable identity
+  // or every row re-renders whenever any one of them expands.
+  const retry = useCallback(async (post: PostRecord) => {
     setRetrying(post.id);
     setError(null);
     try {
@@ -125,9 +127,9 @@ export default function HistoryScreen() {
     } finally {
       setRetrying(null);
     }
-  };
+  }, [load]);
 
-  const cancel = (post: PostRecord) => {
+  const cancel = useCallback((post: PostRecord) => {
     Alert.alert(
       post.launchDrop ? "Cancel Launch Drop?" : "Cancel scheduled post?",
       post.launchDrop
@@ -153,7 +155,15 @@ export default function HistoryScreen() {
         },
       ]
     );
-  };
+  }, [load]);
+
+  const toggleExpanded = useCallback((post: PostRecord) => {
+    setExpandedPostId((current) => (current === post.id ? null : post.id));
+  }, []);
+
+  const fixConnection = useCallback(() => {
+    router.navigate("/(tabs)/connections");
+  }, [router]);
 
   // Pending (still publishing) doesn't count as failed.
   const isFailed = (r: { success: boolean; pending?: boolean }) =>
@@ -259,13 +269,11 @@ export default function HistoryScreen() {
             retrying={retrying === item.id}
             canceling={canceling === item.id}
             expanded={expandedPostId === item.id}
-            onToggle={() =>
-              setExpandedPostId((current) => (current === item.id ? null : item.id))
-            }
-            onRetry={() => retry(item)}
-            onCancel={() => cancel(item)}
+            onToggle={toggleExpanded}
+            onRetry={retry}
+            onCancel={cancel}
             authToken={authToken}
-            onFixConnection={() => router.navigate("/(tabs)/connections")}
+            onFixConnection={fixConnection}
           />
         )}
       />
@@ -326,7 +334,9 @@ function FilterChip({
   );
 }
 
-function PostRow({
+// Memoized: History re-renders on every poll, expand, and retry, and without
+// this each of those re-renders every row in the list.
+const PostRow = memo(function PostRow({
   post,
   retrying,
   canceling,
@@ -341,9 +351,9 @@ function PostRow({
   retrying: boolean;
   canceling: boolean;
   expanded: boolean;
-  onToggle: () => void;
-  onRetry: () => void;
-  onCancel: () => void;
+  onToggle: (post: PostRecord) => void;
+  onRetry: (post: PostRecord) => void;
+  onCancel: (post: PostRecord) => void;
   authToken: string | null;
   onFixConnection: () => void;
 }) {
@@ -370,7 +380,7 @@ function PostRow({
       }}
     >
       <Pressable
-        onPress={onToggle}
+        onPress={() => onToggle(post)}
         accessibilityRole="button"
         accessibilityLabel={`${expanded ? "Hide" : "Show"} details for ${post.title}`}
         style={{ flexDirection: "row", gap: spacing.rowPad, padding: spacing.rowPad }}
@@ -560,7 +570,7 @@ function PostRow({
               </View>
             ) : (
               <Pressable
-                onPress={onRetry}
+                onPress={() => onRetry(post)}
                 style={{
                   alignSelf: "flex-start",
                   paddingVertical: 7,
@@ -592,7 +602,7 @@ function PostRow({
           }}
         >
           <Pressable
-            onPress={onCancel}
+            onPress={() => onCancel(post)}
             disabled={canceling}
             style={{ paddingVertical: 6, paddingHorizontal: 10 }}
           >
@@ -609,7 +619,7 @@ function PostRow({
 
     </View>
   );
-}
+});
 
 function PostThumbnail({
   post,
