@@ -4,6 +4,7 @@ import { postForMe, type PfmPlatform, PFM_PLATFORMS } from "../lib/postForMe.js"
 import { postStore } from "../lib/posts.js";
 import {
   OAUTH_PLATFORMS,
+  isComingSoon,
   isReconnectError,
   type Platform,
 } from "../lib/platforms.js";
@@ -119,6 +120,13 @@ oauthCount >= entitlement.limits.channels
     );
     if (!platform) {
       return reply.code(400).send({ error: "Pick one OAuth platform to connect" });
+    }
+    // Minting an auth URL for these succeeds, but the grant always fails at the
+    // platform — fail fast instead of handing back a link that dead-ends.
+    if (isComingSoon(platform)) {
+      return reply
+        .code(400)
+        .send({ error: "This channel isn't available yet.", code: "COMING_SOON" });
     }
     if (
       await connectionLimitReached(

@@ -97,8 +97,10 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
 };
 
 // Platforms not yet enabled at launch. TikTok is pending its Content Posting
-// audit — shown with a "Soon" badge, not connectable or selectable. Remove a
-// platform from this set to make it live.
-export const COMING_SOON = new Set<Platform>(["tiktok", "threads"]);
+// audit; LinkedIn is blocked upstream — the provider's shared LinkedIn OAuth app
+// isn't authorized for the `openid` scope, so LinkedIn rejects the grant before
+// consent and no auth code is ever issued. Shown with a "Soon" badge, not
+// connectable or selectable. Remove a platform from this set to make it live.
+export const COMING_SOON = new Set<Platform>(["tiktok", "threads", "linkedin"]);
 
 export const isComingSoon = (platform: Platform) => COMING_SOON.has(platform);

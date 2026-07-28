@@ -29,7 +29,6 @@ import {
   type Connection,
   type Platform,
 } from "../../src/api/types";
-import { useAuth } from "../../src/auth/AuthContext";
 import { PlatformTile } from "../../src/components/PlatformTile";
 import { SpinArc } from "../../src/components/SpinArc";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
@@ -59,7 +58,6 @@ function wait(ms: number) {
 export default function ConnectionsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { signOut, deleteAccount } = useAuth();
   const [connections, setConnections] = useState<Connection[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -202,35 +200,6 @@ export default function ConnectionsScreen() {
     );
   };
 
-  const confirmDeleteAccount = () => {
-    Alert.alert(
-      "Delete account",
-      "This permanently deletes your BeamLoop account, connected platforms, and post history. Deleting BeamLoop does not cancel an Apple subscription; cancel it in the App Store first if you no longer want it to renew.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Manage subscription",
-          onPress: () =>
-            void Linking.openURL("https://apps.apple.com/account/subscriptions"),
-        },
-        {
-          text: "Delete anyway",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteAccount();
-            } catch (e) {
-              Alert.alert(
-                "Couldn't delete account",
-                e instanceof Error ? e.message : "Please try again."
-              );
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const openPublicPage = (path: "/support" | "/legal/privacy" | "/legal/terms") =>
     Linking.openURL(`${API_BASE_URL}${path}`).catch(() =>
       setError("Couldn't open that page. Please try again.")
@@ -260,7 +229,12 @@ export default function ConnectionsScreen() {
             Accounts
           </Text>
           <View style={[s.row, { gap: spacing.lg }]}>
-            <Pressable onPress={signOut} hitSlop={8}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Account"
+              onPress={() => router.push("/account")}
+              hitSlop={8}
+            >
               <Text
                 style={{
                   ...type.monoMeta,
@@ -268,7 +242,7 @@ export default function ConnectionsScreen() {
                   letterSpacing: tracking(monoTracking.wide, type.monoMeta.fontSize),
                 }}
               >
-                SIGN OUT
+                ACCOUNT
               </Text>
             </Pressable>
           </View>
@@ -354,24 +328,6 @@ export default function ConnectionsScreen() {
             >
               CONNECT MORE ANY TIME — SESSIONS STAY LIVE
             </Text>
-            <Pressable
-              onPress={confirmDeleteAccount}
-              hitSlop={8}
-              style={{ marginTop: spacing.xxl, paddingVertical: spacing.sm }}
-            >
-              <Text
-                style={{
-                  ...type.monoNav,
-                  color: palette.danger,
-                  letterSpacing: tracking(
-                    monoTracking.wide,
-                    type.monoNav.fontSize
-                  ),
-                }}
-              >
-                DELETE ACCOUNT
-              </Text>
-            </Pressable>
             <View style={[s.row, { gap: spacing.lg, marginTop: spacing.xl }]}>
               <Pressable onPress={() => openPublicPage("/support")} hitSlop={8}>
                 <Text style={{ ...type.monoMeta, color: palette.textMono }}>SUPPORT</Text>

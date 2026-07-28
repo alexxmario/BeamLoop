@@ -18,6 +18,21 @@ export const OAUTH_PLATFORMS = [
 
 export type Platform = (typeof OAUTH_PLATFORMS)[number];
 
+// Platforms that exist in the model but cannot be connected yet. TikTok is
+// pending its Content Posting audit; LinkedIn is blocked upstream (the
+// provider's shared LinkedIn OAuth app isn't authorized for the `openid`
+// scope, so LinkedIn refuses the grant and never issues an auth code).
+// Mirrors COMING_SOON in the mobile client — the client hides them, this
+// stops a hand-rolled request from starting an OAuth flow that can only fail.
+export const COMING_SOON_PLATFORMS = new Set<Platform>([
+  "tiktok",
+  "threads",
+  "linkedin",
+]);
+
+export const isComingSoon = (platform: Platform) =>
+  COMING_SOON_PLATFORMS.has(platform);
+
 // Normalized per-platform publish outcome (provider-agnostic).
 // `pending` = accepted by the provider but the platform result hasn't landed
 // yet (publishing is asynchronous; video can take minutes). Not a failure.

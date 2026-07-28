@@ -345,7 +345,7 @@ export function landingPage() {
           <div class="actions">${storeAction}<a class="button secondary" href="/support">Get support</a></div>
           <div class="launch-note"><span class="dot"></span> Built for iPhone · App Store launch underway</div>
           <div class="channel-strip" aria-label="Supported channels">
-            <span>Instagram</span><span>YouTube</span><span>Facebook</span><span>X</span><span>LinkedIn</span>
+            <span>Instagram</span><span>YouTube</span><span>Facebook</span><span>X</span>
           </div>
         </div>
         <div class="console-preview" aria-label="BeamLoop multi-channel launch preview">

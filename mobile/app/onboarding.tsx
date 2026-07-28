@@ -116,7 +116,7 @@ export default function Onboarding() {
           onSkip={() => goTo(3)}
           hero={<BeamBurst size={sizes.burstHero} variant="plain" animated />}
           title={"One upload.\nEvery platform."}
-          body="Publish a video or photo to Instagram, YouTube, Facebook, X, and LinkedIn — in a single tap."
+          body="Publish a video or photo to Instagram, YouTube, Facebook, and X — in a single tap."
           dots={page}
           dotIndex={0}
           cta="See how it works"
