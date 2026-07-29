@@ -192,6 +192,17 @@ h3 { font-size: 21px; letter-spacing: -.035em; }
   border-left: 3px solid var(--link); background: var(--strip);
   padding: 16px 18px; border-radius: 0 12px 12px 0; color: var(--signal);
 }
+.scroll-x { overflow-x: auto; margin: 1.5rem 0; border: 1px solid var(--line); border-radius: 12px; }
+.compare { width: 100%; min-width: 460px; border-collapse: collapse; background: var(--strip); }
+.compare th {
+  text-align: left; padding: 12px 16px; font-family: JetBrains Mono, ui-monospace, monospace;
+  font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--label);
+  border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.compare td { padding: 12px 16px; border-bottom: 1px solid var(--line); color: var(--muted); }
+.compare tbody tr:last-child td { border-bottom: 0; }
+.compare td:first-child { color: var(--signal); }
+.compare td:last-child { color: var(--success); }
 .support-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0 3rem; }
 .support-card {
   border: 1px solid var(--line); background: var(--strip); border-radius: 18px;
@@ -601,12 +612,169 @@ export function termsPage() {
   });
 }
 
+// Content pages target high-intent search. They are written to answer the
+// query first and mention BeamLoop second — a page that reads as an advert
+// does not rank, and does not convert the people who do land on it.
+
+const PRICE_CHECKED = "Competitor prices checked July 2026 and shown in USD. Vendors change pricing often — check theirs before deciding.";
+
+export function bufferAlternativePage() {
+  return shell({
+    title: "Buffer Alternative for iPhone",
+    description:
+      "Buffer charges per channel. BeamLoop includes every channel for one flat price and publishes video to TikTok and Instagram from your phone. An honest comparison.",
+    path: "/compare/buffer-alternative",
+    content: `
+      <section class="legal-hero wrap">
+        <span class="eyebrow">Comparison</span>
+        <h1>The Buffer alternative built for your phone.</h1>
+        <p class="lede" style="margin:0">Buffer bills you for every channel you add. BeamLoop includes them all for one price — and publishes your video instead of reminding you to do it yourself.</p>
+      </section>
+      <article class="prose wrap">
+        <h2>The per-channel problem</h2>
+        <p>Buffer's paid plans are priced per channel. Every platform you add is another line on the bill, so a creator posting to seven destinations pays seven times over. BeamLoop charges one flat price per plan regardless of how many channels you publish to.</p>
+        <div class="scroll-x">
+          <table class="compare">
+            <thead><tr><th>Channels</th><th>Buffer, at $6 per channel</th><th>BeamLoop Pro</th></tr></thead>
+            <tbody>
+              <tr><td>3 channels</td><td>$18 / month</td><td>$19.99 / month</td></tr>
+              <tr><td>5 channels</td><td>$30 / month</td><td>$19.99 / month</td></tr>
+              <tr><td>7 channels</td><td>$42 / month</td><td>$19.99 / month</td></tr>
+              <tr><td>7 channels, paid yearly</td><td>$504 / year</td><td>$159.99 / year</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>On the yearly plan that works out at $13.33 a month for every channel BeamLoop supports — roughly what Buffer charges for two.</p>
+        <div class="notice"><strong>Where Buffer is cheaper:</strong> if you only ever post to one or two channels, Buffer costs less, and its free plan covers three channels at no cost. The flat price only wins once you are publishing widely.</div>
+
+        <h2>Scheduled, or actually published?</h2>
+        <p>This is the difference that matters more than price. Several schedulers cannot publish video directly to every network — instead they send a notification at the scheduled time telling you to open the app and post it by hand. That is a reminder, not automation, and it means your posting still depends on you being awake and holding your phone.</p>
+        <p>BeamLoop publishes to your connected accounts directly. You approve once, at the moment you create the post.</p>
+
+        <h2>Built where you already are</h2>
+        <p>Most social tools are web apps with a companion mobile app bolted on. If you shoot and edit on your phone, that means exporting to a laptop just to distribute what you already have in your camera roll.</p>
+        <p>BeamLoop is an iPhone app first. Pick the video from your library, write per-platform captions, choose your channels, send. Nothing about the workflow assumes a desktop.</p>
+
+        <h2>Honest limits</h2>
+        <p>Buffer does several things BeamLoop does not, and if you need them it is the better tool: deeper analytics and reporting, team approval workflows, a browser extension for queueing links while you browse, and a longer track record. BeamLoop is focused on one job — getting a photo or video onto every account you own, quickly, from your phone.</p>
+
+        <h2>What each plan includes</h2>
+        <ul>
+          <li><strong>Free</strong> — 2 channels, 10 posts a month, 5 scheduled posts.</li>
+          <li><strong>Creator, $9.99/month or $79.99/year</strong> — 3 channels, 100 posts a month, 50 scheduled posts, per-platform captions and placements, one year of post history.</li>
+          <li><strong>Pro, $19.99/month or $159.99/year</strong> — every channel BeamLoop supports, 500 posts a month, up to 1,000 scheduled posts, Launch Drops, unlimited post history.</li>
+        </ul>
+        <p>Both yearly plans cost eight months of the monthly price, so a year works out four months free.</p>
+        ${storeCta()}
+        <p class="muted" style="font-size:.9rem">${PRICE_CHECKED}</p>
+      </article>`,
+  });
+}
+
+export function postTikTokInstagramPage() {
+  return shell({
+    title: "How to Post to TikTok and Instagram at the Same Time",
+    description:
+      "Three ways to publish one video to TikTok and Instagram together — native sharing, schedulers, and publishing from your phone — with the trade-offs of each.",
+    path: "/guides/post-tiktok-instagram-at-once",
+    content: `
+      <section class="legal-hero wrap">
+        <span class="eyebrow">Guide</span>
+        <h1>How to post to TikTok and Instagram at the same time.</h1>
+        <p class="lede" style="margin:0">There are three ways to do it. Two are free and tedious, one is not. Here is what each actually costs you.</p>
+      </section>
+      <article class="prose wrap">
+        <p><strong>The short answer:</strong> upload your video to one platform, then either share it to the other using the built-in share sheet, use a scheduling tool that posts to both, or publish to both at once from an app that connects to each account directly. The third is fastest; the first is free but degrades your video.</p>
+
+        <h2>Method 1 — the built-in share sheet</h2>
+        <p>Both apps let you share a finished post onward. It costs nothing and needs no extra software.</p>
+        <p>The catch is quality. When you export a video that a platform has already compressed and then upload it somewhere else, it gets compressed a second time. The result looks noticeably softer than your original file, and on short-form video that difference is visible.</p>
+        <p>The larger catch is watermarks. A video saved from TikTok carries a TikTok watermark, and reposting watermarked content from a competing app is widely reported to suppress reach. Always start from your original file rather than a download.</p>
+
+        <h2>Method 2 — a scheduling tool</h2>
+        <p>Schedulers let you write once and queue to several platforms. This works well for photos and text.</p>
+        <p>Video is where it gets uneven. Some tools cannot publish video directly to every network and instead send a reminder notification at the scheduled time, expecting you to finish the post by hand. Before committing to a tool, check whether it truly publishes video to the platforms you care about, or only reminds you.</p>
+        <p>Most schedulers are also web-first, which means a laptop, which means exporting footage off the phone you shot it on.</p>
+
+        <h2>Method 3 — publish to both from your phone</h2>
+        <p>An app that connects directly to your accounts can send one upload to both platforms at once, from your original file, with no re-compression and no watermark.</p>
+        <p>This is what BeamLoop does. Pick the video from your library, connect TikTok and Instagram once, and publish to both in a single action. The same upload can go to YouTube, Facebook, X, and Threads at the same time.</p>
+
+        <h2>Write different captions for each</h2>
+        <p>Posting identical text everywhere is the most common mistake. The audiences behave differently: TikTok rewards a hook in the first line, Instagram tolerates longer copy, and hashtag conventions differ on each.</p>
+        <p>BeamLoop's Creator and Pro plans include per-platform captions, so one upload can carry a different hook per destination without creating the post twice.</p>
+
+        <h2>Should you post at the same time?</h2>
+        <p>Simultaneous posting is fine and is what most creators do. If you want to test which platform drives more of your growth, staggering by a few hours makes the attribution clearer. Scheduling exists for exactly that.</p>
+        ${storeCta()}
+      </article>`,
+  });
+}
+
+export function crossPostReelsPage() {
+  return shell({
+    title: "Cross-Post Reels to TikTok and YouTube Shorts",
+    description:
+      "One vertical video, every short-form platform. How to cross-post Reels to TikTok, YouTube Shorts, Facebook, and Threads from a single upload — without watermarks.",
+    path: "/guides/cross-post-reels-shorts-tiktok",
+    content: `
+      <section class="legal-hero wrap">
+        <span class="eyebrow">Guide</span>
+        <h1>Cross-post Reels to TikTok, Shorts, and everywhere else.</h1>
+        <p class="lede" style="margin:0">One vertical video fits every short-form platform. The mistake most people make is how they move it between them.</p>
+      </section>
+      <article class="prose wrap">
+        <h2>Never re-download to repost</h2>
+        <p>The usual approach is to post to one platform, save the video back to your camera roll, then upload it to the next. This is the single most damaging habit in short-form video, for two reasons.</p>
+        <p>First, the saved file carries the originating platform's watermark. Reposting watermarked content from a competing service is widely reported to suppress distribution — you are advertising a rival inside their app, and the recommendation systems are not enthusiastic about it.</p>
+        <p>Second, every save-and-reupload cycle re-compresses the video. Do it across four platforms and the last one receives a visibly degraded copy of your work.</p>
+        <div class="notice"><strong>The rule:</strong> always publish from your original export, once per platform, never from a download.</div>
+
+        <h2>One master file, four destinations</h2>
+        <p>Export a single vertical file at 1080&times;1920 and publish that same file to each platform. A 9:16 video is accepted natively by Reels, TikTok, YouTube Shorts, Facebook, and Threads, so there is no need to produce separate versions.</p>
+        <p>BeamLoop takes one upload from your library and delivers it to every connected account at once, from that original file.</p>
+
+        <h2>What to change per platform</h2>
+        <ul>
+          <li><strong>TikTok</strong> — front-load the hook. The caption is short and the first line does the work.</li>
+          <li><strong>Instagram Reels</strong> — more room for context, and hashtags behave differently from TikTok's.</li>
+          <li><strong>YouTube Shorts</strong> — the title is a separate field and matters far more than the description for discovery.</li>
+          <li><strong>Facebook and Threads</strong> — usually an older audience and a more conversational register than the same clip needs on TikTok.</li>
+        </ul>
+        <p>Per-platform captions on the Creator and Pro plans let one upload carry different text and titles for each destination, rather than rebuilding the post four times.</p>
+
+        <h2>Timing</h2>
+        <p>Publishing everywhere at once is the normal approach and costs you nothing. Stagger only if you want to read which platform is actually driving growth, since simultaneous posts make that hard to separate.</p>
+
+        <h2>Which tools reach all four</h2>
+        <p>Check two things before choosing any tool: whether it publishes video <em>directly</em> to each platform rather than sending you a reminder to post manually, and whether it works on the device you actually shoot on. Plenty of schedulers cover the platforms on paper but fall back to notifications for video, or assume you are sitting at a desktop.</p>
+        <p>BeamLoop publishes directly, from an iPhone, to TikTok, Instagram, YouTube, Facebook, X, and Threads.</p>
+        ${storeCta()}
+      </article>`,
+  });
+}
+
+function storeCta() {
+  return config.APP_STORE_URL
+    ? `<div class="actions"><a class="button primary" href="${escapeHtml(config.APP_STORE_URL)}">Download on the App Store</a></div>`
+    : "";
+}
+
 export function robotsText() {
   return `User-agent: *\nAllow: /\nDisallow: /auth/\nDisallow: /admin\nDisallow: /connections\nDisallow: /uploads/\nSitemap: ${baseUrl}/sitemap.xml\n`;
 }
 
 export function sitemapXml() {
-  const paths = ["/", "/support", "/account-deletion", "/legal/privacy", "/legal/terms"];
+  const paths = [
+    "/",
+    "/support",
+    "/compare/buffer-alternative",
+    "/guides/post-tiktok-instagram-at-once",
+    "/guides/cross-post-reels-shorts-tiktok",
+    "/account-deletion",
+    "/legal/privacy",
+    "/legal/terms",
+  ];
   return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${paths
     .map((path) => `<url><loc>${baseUrl}${path}</loc></url>`)
     .join("")}</urlset>`;

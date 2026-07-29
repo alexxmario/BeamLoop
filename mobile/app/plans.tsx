@@ -220,6 +220,35 @@ export default function PlansScreen({ tabMode = false }: { tabMode?: boolean }) 
   const currentPlan = billing?.entitlement.plan ?? "free";
   const currentProductId = billing?.entitlement.productId ?? null;
 
+  // What a year on the monthly plan would cost, formatted in the store's own
+  // currency. Derived from StoreKit's numeric price rather than hardcoded, so
+  // it stays correct on every storefront. Apple's real localized price is
+  // always the headline; this only sits beside it as the comparison.
+  const yearOfMonthly = (plan: "creator" | "pro") => {
+    const monthly = byId.get(PRODUCTS[plan].monthly);
+    const yearly = byId.get(PRODUCTS[plan].yearly);
+    if (!monthly?.price || !yearly?.price || !monthly.currency) return null;
+    const twelve = monthly.price * 12;
+    if (twelve <= yearly.price) return null;
+    const format = (value: number) =>
+      new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: monthly.currency,
+      }).format(value);
+    // Whole months saved, floored — never overstate the discount.
+    const monthsFree = Math.floor((twelve - yearly.price) / monthly.price);
+    return { was: format(twelve), monthsFree };
+  };
+
+  // "4 months free" outsells "save 33%" and says the same thing. Only claim it
+  // on the toggle when both tiers agree, since one label covers both cards.
+  const creatorSaving = yearOfMonthly("creator");
+  const proSaving = yearOfMonthly("pro");
+  const yearlyLabel =
+    creatorSaving && proSaving && creatorSaving.monthsFree === proSaving.monthsFree
+      ? `Yearly · ${creatorSaving.monthsFree} months free`
+      : "Yearly · best value";
+
   // Apple applies a change inside a subscription group differently depending on
   // direction, and the difference is money: an upgrade starts now and credits
   // the unused remainder, a downgrade waits for the period to end. Someone
@@ -357,7 +386,7 @@ export default function PlansScreen({ tabMode = false }: { tabMode?: boolean }) 
                   color: period === value ? palette.console : palette.textSecondary,
                 }}
               >
-                {value === "monthly" ? "Monthly" : "Yearly · best value"}
+                {value === "monthly" ? "Monthly" : yearlyLabel}
               </Text>
             </Pressable>
           ))}
@@ -406,6 +435,34 @@ export default function PlansScreen({ tabMode = false }: { tabMode?: boolean }) 
                   {period === "monthly" ? " / month" : " / year"}
                 </Text>
               </Text>
+              {period === "yearly" &&
+                (() => {
+                  const saving = yearOfMonthly(plan);
+                  if (!saving) return null;
+                  return (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: spacing.sm,
+                        marginTop: -spacing.xs,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          ...type.bodySm,
+                          color: palette.textLabel,
+                          textDecorationLine: "line-through",
+                        }}
+                      >
+                        {saving.was}
+                      </Text>
+                      <Text style={{ ...type.mono, color: palette.success }}>
+                        {saving.monthsFree} MONTHS FREE
+                      </Text>
+                    </View>
+                  );
+                })()}
               {FEATURES[plan].map((feature) => (
                 <Text key={feature} style={{ ...type.bodySm, color: palette.textSecondary }}>
                   ✓ {feature}

@@ -5,7 +5,10 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { passwordResetStore } from "../lib/passwordResets.js";
 import {
   accountDeletionPage,
+  bufferAlternativePage,
+  crossPostReelsPage,
   landingPage,
+  postTikTokInstagramPage,
   resetPasswordPage,
   privacyPage,
   robotsText,
@@ -41,6 +44,17 @@ export default async function legalRoutes(app: FastifyInstance) {
   app.get("/support", async (_req, reply) => sendPage(reply, supportPage()));
   app.get("/account-deletion", async (_req, reply) =>
     sendPage(reply, accountDeletionPage())
+  );
+
+  // Content pages targeting high-intent search. Listed in sitemap.xml.
+  app.get("/compare/buffer-alternative", async (_req, reply) =>
+    sendPage(reply, bufferAlternativePage())
+  );
+  app.get("/guides/post-tiktok-instagram-at-once", async (_req, reply) =>
+    sendPage(reply, postTikTokInstagramPage())
+  );
+  app.get("/guides/cross-post-reels-shorts-tiktok", async (_req, reply) =>
+    sendPage(reply, crossPostReelsPage())
   );
 
   app.get("/legal/privacy", async (_req, reply) => {
