@@ -622,7 +622,7 @@ export function bufferAlternativePage() {
   return shell({
     title: "Buffer Alternative for iPhone",
     description:
-      "Buffer charges per channel. BeamLoop includes every channel for one flat price and publishes video to TikTok and Instagram from your phone. An honest comparison.",
+      "Buffer charges $5 per channel. BeamLoop includes every channel for one flat price and publishes video to TikTok and Instagram from your phone. An honest comparison.",
     path: "/compare/buffer-alternative",
     content: `
       <section class="legal-hero wrap">
@@ -635,17 +635,17 @@ export function bufferAlternativePage() {
         <p>Buffer's paid plans are priced per channel. Every platform you add is another line on the bill, so a creator posting to seven destinations pays seven times over. BeamLoop charges one flat price per plan regardless of how many channels you publish to.</p>
         <div class="scroll-x">
           <table class="compare">
-            <thead><tr><th>Channels</th><th>Buffer, at $6 per channel</th><th>BeamLoop Pro</th></tr></thead>
+            <thead><tr><th>Channels</th><th>Buffer Essentials, $5 per channel</th><th>BeamLoop</th></tr></thead>
             <tbody>
-              <tr><td>3 channels</td><td>$18 / month</td><td>$19.99 / month</td></tr>
-              <tr><td>5 channels</td><td>$30 / month</td><td>$19.99 / month</td></tr>
-              <tr><td>7 channels</td><td>$42 / month</td><td>$19.99 / month</td></tr>
-              <tr><td>7 channels, paid yearly</td><td>$504 / year</td><td>$159.99 / year</td></tr>
+              <tr><td>3 channels</td><td>$15 / month</td><td>$9.99 / month · Creator</td></tr>
+              <tr><td>5 channels</td><td>$25 / month</td><td>$19.99 / month · Pro</td></tr>
+              <tr><td>7 channels</td><td>$35 / month</td><td>$19.99 / month · Pro</td></tr>
+              <tr><td>7 channels, paid yearly</td><td>$420 / year</td><td>$159.99 / year · Pro</td></tr>
             </tbody>
           </table>
         </div>
-        <p>On the yearly plan that works out at $13.33 a month for every channel BeamLoop supports — roughly what Buffer charges for two.</p>
-        <div class="notice"><strong>Where Buffer is cheaper:</strong> if you only ever post to one or two channels, Buffer costs less, and its free plan covers three channels at no cost. The flat price only wins once you are publishing widely.</div>
+        <p>On the yearly plan that works out at $13.33 a month for every channel BeamLoop supports — less than Buffer charges for three.</p>
+        <div class="notice"><strong>Where Buffer is cheaper:</strong> at one or two channels Buffer costs less, and its free plan covers three channels with 10 scheduled posts each — more generous than BeamLoop's free tier of 2 channels and 10 posts a month. Flat pricing only wins once you publish widely.</div>
 
         <h2>Scheduled, or actually published?</h2>
         <p>This is the difference that matters more than price. Several schedulers cannot publish video directly to every network — instead they send a notification at the scheduled time telling you to open the app and post it by hand. That is a reminder, not automation, and it means your posting still depends on you being awake and holding your phone.</p>
