@@ -57,6 +57,10 @@ const envSchema = z.object({
   // Retry media is useful only briefly. Keep it long enough for a user to
   // recover a failed delivery, then remove it automatically.
   MEDIA_RETENTION_HOURS: z.coerce.number().int().min(1).max(720).default(168),
+  // Single-password gate for the /admin read-only console. When this is unset
+  // the admin routes are not registered at all, so an unconfigured deployment
+  // has no surface to attack rather than a guessable default.
+  ADMIN_PASSWORD: z.string().min(12, "ADMIN_PASSWORD must be at least 12 chars").optional(),
   PORT: z.coerce.number().default(3000),
 });
 

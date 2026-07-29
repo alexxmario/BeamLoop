@@ -602,7 +602,7 @@ export function termsPage() {
 }
 
 export function robotsText() {
-  return `User-agent: *\nAllow: /\nDisallow: /auth/\nDisallow: /connections\nDisallow: /uploads/\nSitemap: ${baseUrl}/sitemap.xml\n`;
+  return `User-agent: *\nAllow: /\nDisallow: /auth/\nDisallow: /admin\nDisallow: /connections\nDisallow: /uploads/\nSitemap: ${baseUrl}/sitemap.xml\n`;
 }
 
 export function sitemapXml() {

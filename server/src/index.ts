@@ -8,6 +8,7 @@ import authRoutes from "./routes/auth.js";
 import connectionRoutes from "./routes/connections.js";
 import uploadRoutes from "./routes/uploads.js";
 import legalRoutes from "./routes/legal.js";
+import adminRoutes from "./routes/admin.js";
 import webhookRoutes from "./routes/webhooks.js";
 import billingRoutes from "./routes/billing.js";
 import notificationRoutes from "./routes/notifications.js";
@@ -57,6 +58,7 @@ app.setErrorHandler((err, req, reply) => {
 app.get("/health", async () => ({ ok: true }));
 
 await app.register(legalRoutes);
+await app.register(adminRoutes);
 await app.register(webhookRoutes);
 await app.register(billingRoutes);
 await app.register(authRoutes);
