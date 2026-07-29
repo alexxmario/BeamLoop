@@ -23,7 +23,15 @@ import { palette } from "../src/theme";
 void SplashScreen.preventAutoHideAsync();
 
 // Screen groups that require a signed-in user.
-const PROTECTED_GROUPS = ["(tabs)", "compose", "connect", "connections", "library", "plans"];
+const PROTECTED_GROUPS = [
+  "(tabs)",
+  "account",
+  "compose",
+  "connect",
+  "connections",
+  "library",
+  "plans",
+];
 
 // Reactively keep navigation in sync with auth state: if the session goes away
 // (sign out, account deletion, or an expired token) while the user is on a

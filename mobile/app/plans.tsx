@@ -15,6 +15,7 @@ import {
   deepLinkToSubscriptions,
   finishTransaction as finishStoreTransaction,
   getAvailablePurchases,
+  getPendingTransactionsIOS,
   type ProductSubscription,
   type Purchase,
   useIAP,
@@ -24,7 +25,7 @@ import {
   validateAppleTransaction,
 } from "../src/api/beamloop";
 import type { BillingStatus, PlanId } from "../src/api/types";
-import { API_BASE_URL } from "../src/api/client";
+import { API_BASE_URL, ApiError } from "../src/api/client";
 import { useAuth } from "../src/auth/AuthContext";
 import { fonts, palette, radius, spacing, type } from "../src/theme";
 
@@ -74,8 +75,65 @@ export default function PlansScreen({ tabMode = false }: { tabMode?: boolean }) 
     await finishStoreTransaction({ purchase, isConsumable: false });
     setBilling(next);
     setBusy(null);
-    setMessage("Your BeamLoop plan is active.");
+    // A drained transaction can be one that has since lapsed, so report what
+    // the server actually recorded rather than assuming a live plan.
+    setMessage(
+      next.entitlement.plan === "free"
+        ? "That App Store purchase is no longer active."
+        : "Your BeamLoop plan is active."
+    );
   }, []);
+
+  // The dead end worth naming: this Apple ID already owns a BeamLoop
+  // subscription that belongs to a different BeamLoop account. We can't claim
+  // it (it isn't this account's) and the App Store won't sell it twice, so the
+  // buy button would fail with StoreKit's opaque "Unable to Complete Request".
+  // Only the buyer can resolve it, and only if we tell them which way out.
+  const conflictMessage = (error: unknown) =>
+    error instanceof ApiError && error.status === 409
+      ? "This Apple ID's subscription is already linked to a different BeamLoop account. Sign in with that account, or subscribe here using a different Apple ID."
+      : "We couldn't finish syncing a recent purchase. Tap Restore Purchases to try again.";
+
+  // A transaction the server will never accept — one already bound to another
+  // BeamLoop account, or a product we no longer sell — must still be finished.
+  // StoreKit replays unfinished transactions forever and refuses to sell the
+  // product again while one is outstanding, so leaving it queued bricks the
+  // paywall. Transient failures (offline, 5xx, expired session) keep theirs so
+  // the entitlement can still be recorded on a later attempt.
+  const isPermanentRejection = (error: unknown) =>
+    error instanceof ApiError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 401 &&
+    error.status !== 408 &&
+    error.status !== 429;
+
+  // Clears StoreKit's unfinished queue: records what our server will take and
+  // discards what it has permanently refused. Runs before anything else so a
+  // stuck transaction from an earlier failed attempt can't block a new
+  // purchase. Returns how many were handed to the server successfully.
+  const drainPendingTransactions = useCallback(async () => {
+    if (Platform.OS !== "ios") return 0;
+    const pending = await getPendingTransactionsIOS();
+    let accepted = 0;
+    for (const item of pending) {
+      if (
+        !ALL_PRODUCT_IDS.includes(
+          item.productId as (typeof ALL_PRODUCT_IDS)[number]
+        )
+      ) {
+        continue;
+      }
+      try {
+        await acceptPurchase(item);
+        accepted += 1;
+      } catch (error) {
+        if (!isPermanentRejection(error)) throw error;
+        await finishStoreTransaction({ purchase: item, isConsumable: false });
+      }
+    }
+    return accepted;
+  }, [acceptPurchase]);
 
   // Claims every active App Store subscription on this Apple ID that our
   // server hasn't recorded yet. Returns how many were claimed.
@@ -119,38 +177,88 @@ export default function PlansScreen({ tabMode = false }: { tabMode?: boolean }) 
     fetchBillingStatus().then(setBilling).catch(() => setMessage("Couldn't load your plan."));
   }, []);
 
+  // The App Store returns an empty list — no error — for products it won't
+  // sell yet, which would otherwise leave the buttons silently dead. Track
+  // that the fetch finished so an empty result can say so.
+  const [productsFetched, setProductsFetched] = useState(false);
   useEffect(() => {
-    if (connected && Platform.OS === "ios") {
-      fetchProducts({ skus: ALL_PRODUCT_IDS, type: "subs" }).catch(() =>
-        setMessage("The App Store plans are temporarily unavailable.")
-      );
-    }
+    if (!connected || Platform.OS !== "ios") return;
+    fetchProducts({ skus: ALL_PRODUCT_IDS, type: "subs" })
+      .catch(() => setMessage("The App Store plans are temporarily unavailable."))
+      .finally(() => setProductsFetched(true));
   }, [connected, fetchProducts]);
 
-  // A subscription bought outside the app — App Store product page, Ask to Buy
-  // approval — carries no appAccountToken, so our webhook can't map it to an
-  // account and the buyer arrives here still on Free. Claim it for them rather
-  // than relying on them to find "Restore Purchases". Silent on both outcomes:
-  // the overwhelmingly common case is a real free user with nothing to claim.
-  const autoClaimAttempted = useRef(false);
+  // Recovery, once per visit. Draining runs whatever the plan — a stuck
+  // transaction blocks new purchases even for someone already subscribed.
+  // Claiming only matters for someone the server still thinks is free: a
+  // subscription bought outside the app (App Store product page, Ask to Buy
+  // approval) carries no appAccountToken, so the webhook can't map it to an
+  // account and the buyer arrives here on Free.
+  const recoveryAttempted = useRef(false);
   useEffect(() => {
-    if (autoClaimAttempted.current || busy) return;
-    if (Platform.OS !== "ios" || !connected) return;
-    if (!billing || billing.entitlement.plan !== "free") return;
-    autoClaimAttempted.current = true;
-    void claimActivePurchases().catch(() => {
-      // Restore Purchases stays as the explicit, user-driven fallback.
+    if (recoveryAttempted.current || busy) return;
+    if (Platform.OS !== "ios" || !connected || !billing) return;
+    recoveryAttempted.current = true;
+    void (async () => {
+      await drainPendingTransactions();
+      if (billing.entitlement.plan === "free") await claimActivePurchases();
+    })().catch((error) => {
+      // Nothing to recover throws nothing, so reaching here means a real
+      // purchase is stranded. Say so instead of leaving the buyer to guess.
+      setMessage(conflictMessage(error));
     });
-  }, [billing, busy, connected, claimActivePurchases]);
+  }, [billing, busy, connected, claimActivePurchases, drainPendingTransactions]);
 
   const byId = useMemo(
     () => new Map(subscriptions.map((product) => [product.id, product])),
     [subscriptions]
   );
 
+  // Entitlement carries the exact SKU, so "current" means this plan at this
+  // billing period. Matching on the plan alone would mark the yearly card as
+  // current for a monthly subscriber and block the switch.
+  const currentPlan = billing?.entitlement.plan ?? "free";
+  const currentProductId = billing?.entitlement.productId ?? null;
+
+  // Apple applies a change inside a subscription group differently depending on
+  // direction, and the difference is money: an upgrade starts now and credits
+  // the unused remainder, a downgrade waits for the period to end. Someone
+  // already paying deserves to know which before the sheet opens.
+  const RANK = { free: 0, creator: 1, pro: 2 } as const;
+  const changeSummary = (plan: "creator" | "pro") => {
+    if (currentPlan === "free" || !currentProductId) return null;
+    const label = plan === "creator" ? "Creator" : "Pro";
+    if (RANK[plan] > RANK[currentPlan]) {
+      return {
+        title: `Upgrade to ${label}?`,
+        body: `${label} replaces your current plan straight away, and the App Store credits the unused part of the period you've already paid for. You'll see the exact charge before confirming.`,
+      };
+    }
+    if (RANK[plan] < RANK[currentPlan]) {
+      return {
+        title: `Change to ${label}?`,
+        body: `You'll keep your current plan's features until this billing period ends, then move to ${label}. Nothing is charged today.`,
+      };
+    }
+    return {
+      title: `Switch to ${period} billing?`,
+      body: `You'll stay on ${label}. The new billing period takes effect when your current one ends, and the App Store will show the exact charge before you confirm.`,
+    };
+  };
+
+  const confirmChange = (summary: { title: string; body: string }) =>
+    new Promise<boolean>((resolve) => {
+      Alert.alert(summary.title, summary.body, [
+        { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+        { text: "Continue", onPress: () => resolve(true) },
+      ]);
+    });
+
   const purchase = async (plan: "creator" | "pro") => {
     if (!user || Platform.OS !== "ios") return;
     const sku = PRODUCTS[plan][period];
+    const summary = changeSummary(plan);
+    if (summary && !(await confirmChange(summary))) return;
     setBusy(sku);
     setMessage(null);
     try {
@@ -177,14 +285,13 @@ export default function PlansScreen({ tabMode = false }: { tabMode?: boolean }) 
     setBusy("restore");
     setMessage(null);
     try {
-      if ((await claimActivePurchases()) === 0) {
+      const recovered =
+        (await drainPendingTransactions()) + (await claimActivePurchases());
+      if (recovered === 0) {
         setMessage("No active BeamLoop subscription was found for this Apple ID.");
       }
     } catch (error) {
-      Alert.alert(
-        "Couldn't restore purchases",
-        error instanceof Error ? error.message : "Please try again."
-      );
+      Alert.alert("Couldn't restore purchases", conflictMessage(error));
     } finally {
       setBusy(null);
     }
@@ -192,7 +299,6 @@ export default function PlansScreen({ tabMode = false }: { tabMode?: boolean }) 
 
   const price = (product?: ProductSubscription) =>
     product?.displayPrice ?? "Unavailable";
-  const current = billing?.entitlement.plan ?? "free";
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.console }}>
@@ -257,10 +363,23 @@ export default function PlansScreen({ tabMode = false }: { tabMode?: boolean }) 
           ))}
         </View>
 
+        {productsFetched && subscriptions.length === 0 && (
+          <Text
+            accessibilityLiveRegion="polite"
+            style={{ ...type.bodySm, color: palette.textSecondary, textAlign: "center" }}
+          >
+            The App Store isn't returning BeamLoop's plans right now. Check your
+            connection and pull up this screen again in a moment.
+          </Text>
+        )}
+
         {(["creator", "pro"] as const).map((plan) => {
           const sku = PRODUCTS[plan][period];
           const product = byId.get(sku);
-          const isCurrent = current === plan;
+          const isCurrent = currentProductId === sku;
+          // Same plan, other billing period: StoreKit crossgrades within the
+          // subscription group, so this stays a live button.
+          const isPeriodSwitch = !isCurrent && currentPlan === plan;
           return (
             <View
               key={plan}
@@ -316,7 +435,11 @@ export default function PlansScreen({ tabMode = false }: { tabMode?: boolean }) 
                       color: isCurrent ? palette.textSecondary : palette.console,
                     }}
                   >
-                    {isCurrent ? "Current plan" : `Choose ${plan}`}
+                    {isCurrent
+                      ? "Current plan"
+                      : isPeriodSwitch
+                        ? `Switch to ${period}`
+                        : `Choose ${plan}`}
                   </Text>
                 )}
               </Pressable>

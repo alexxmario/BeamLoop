@@ -69,17 +69,20 @@ export default async function billingRoutes(app: FastifyInstance) {
       const existing = subscriptionStore.findByOriginalTransactionId(
         fields.originalTransactionId
       );
-      // New purchases are bound with StoreKit's UUID appAccountToken. Renewals
-      // retain that token. An existing original transaction may only be
-      // restored by the BeamLoop account that first claimed it.
+      // New purchases are bound with StoreKit's UUID appAccountToken and
+      // renewals retain it, so the token says who actually paid. Apple does not
+      // guarantee the case it echoes back; our ids are lowercase UUIDs.
+      const appAccountToken = transaction.appAccountToken?.toLowerCase();
+      const purchasedByCaller = appAccountToken === req.user.id;
+      // A restore replays the original token, so it may only be claimed by the
+      // account that first bought it. A fresh purchase made from this account
+      // rebinds instead: one Apple ID resubscribing under a new BeamLoop
+      // account is a paying customer, not a thief, and must not dead-end.
       if (
-        (existing && existing.userId !== req.user.id) ||
-        (!existing &&
-          transaction.appAccountToken !== req.user.id &&
-          Boolean(
-            transaction.appAccountToken &&
-              userStore.findById(transaction.appAccountToken)
-          ))
+        existing
+          ? existing.userId !== req.user.id && !purchasedByCaller
+          : !purchasedByCaller &&
+            Boolean(appAccountToken && userStore.findById(appAccountToken))
       ) {
         return reply.code(409).send({
           error: "This Apple subscription belongs to another BeamLoop account",
@@ -143,7 +146,8 @@ export default async function billingRoutes(app: FastifyInstance) {
     const existing = subscriptionStore.findByOriginalTransactionId(
       fields.originalTransactionId
     );
-    const userId = existing?.userId ?? transaction.appAccountToken;
+    const userId =
+      existing?.userId ?? transaction.appAccountToken?.toLowerCase();
     if (!userId || !userStore.findById(userId)) {
       req.log.warn(
         { originalTransactionId: fields.originalTransactionId },
