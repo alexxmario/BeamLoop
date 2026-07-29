@@ -612,61 +612,55 @@ export function termsPage() {
   });
 }
 
-// Content pages target high-intent search. They are written to answer the
-// query first and mention BeamLoop second — a page that reads as an advert
-// does not rank, and does not convert the people who do land on it.
+// Content pages target high-intent search. They answer the query first and
+// mention BeamLoop second — a page that reads as an advert does not rank, and
+// does not convert the people who do land on it. Deliberate house rule: these
+// pages never name another product. Comparison pages are common in this
+// category, but BeamLoop does not sell by pointing at anyone else.
 
-const PRICE_CHECKED = "Competitor prices checked July 2026 and shown in USD. Vendors change pricing often — check theirs before deciding.";
-
-export function bufferAlternativePage() {
+export function pricingPage() {
   return shell({
-    title: "Buffer Alternative for iPhone",
+    title: "Pricing",
     description:
-      "Buffer charges $5 per channel. BeamLoop includes every channel for one flat price and publishes video to TikTok and Instagram from your phone. An honest comparison.",
-    path: "/compare/buffer-alternative",
+      "BeamLoop pricing: a free plan, Creator at $9.99 a month, and Pro at $19.99 a month for every channel. One flat price per plan, however many accounts you publish to.",
+    path: "/pricing",
     content: `
       <section class="legal-hero wrap">
-        <span class="eyebrow">Comparison</span>
-        <h1>The Buffer alternative built for your phone.</h1>
-        <p class="lede" style="margin:0">Buffer bills you for every channel you add. BeamLoop includes them all for one price — and publishes your video instead of reminding you to do it yourself.</p>
+        <span class="eyebrow">Pricing</span>
+        <h1>One price. Every channel.</h1>
+        <p class="lede" style="margin:0">BeamLoop charges a flat price per plan, however many accounts you publish to. Add a channel and your bill stays the same.</p>
       </section>
       <article class="prose wrap">
-        <h2>The per-channel problem</h2>
-        <p>Buffer's paid plans are priced per channel. Every platform you add is another line on the bill, so a creator posting to seven destinations pays seven times over. BeamLoop charges one flat price per plan regardless of how many channels you publish to.</p>
         <div class="scroll-x">
           <table class="compare">
-            <thead><tr><th>Channels</th><th>Buffer Essentials, $5 per channel</th><th>BeamLoop</th></tr></thead>
+            <thead><tr><th>Plan</th><th>Monthly</th><th>Yearly</th></tr></thead>
             <tbody>
-              <tr><td>3 channels</td><td>$15 / month</td><td>$9.99 / month · Creator</td></tr>
-              <tr><td>5 channels</td><td>$25 / month</td><td>$19.99 / month · Pro</td></tr>
-              <tr><td>7 channels</td><td>$35 / month</td><td>$19.99 / month · Pro</td></tr>
-              <tr><td>7 channels, paid yearly</td><td>$420 / year</td><td>$159.99 / year · Pro</td></tr>
+              <tr><td>Free</td><td>$0</td><td>$0</td></tr>
+              <tr><td>Creator</td><td>$9.99 / month</td><td>$79.99 / year</td></tr>
+              <tr><td>Pro</td><td>$19.99 / month</td><td>$159.99 / year</td></tr>
             </tbody>
           </table>
         </div>
-        <p>On the yearly plan that works out at $13.33 a month for every channel BeamLoop supports — less than Buffer charges for three.</p>
-        <div class="notice"><strong>Where Buffer is cheaper:</strong> at one or two channels Buffer costs less, and its free plan covers three channels with 10 scheduled posts each — more generous than BeamLoop's free tier of 2 channels and 10 posts a month. Flat pricing only wins once you publish widely.</div>
-
-        <h2>Scheduled, or actually published?</h2>
-        <p>This is the difference that matters more than price. Several schedulers cannot publish video directly to every network — instead they send a notification at the scheduled time telling you to open the app and post it by hand. That is a reminder, not automation, and it means your posting still depends on you being awake and holding your phone.</p>
-        <p>BeamLoop publishes to your connected accounts directly. You approve once, at the moment you create the post.</p>
-
-        <h2>Built where you already are</h2>
-        <p>Most social tools are web apps with a companion mobile app bolted on. If you shoot and edit on your phone, that means exporting to a laptop just to distribute what you already have in your camera roll.</p>
-        <p>BeamLoop is an iPhone app first. Pick the video from your library, write per-platform captions, choose your channels, send. Nothing about the workflow assumes a desktop.</p>
-
-        <h2>Honest limits</h2>
-        <p>Buffer does several things BeamLoop does not, and if you need them it is the better tool: deeper analytics and reporting, team approval workflows, a browser extension for queueing links while you browse, and a longer track record. BeamLoop is focused on one job — getting a photo or video onto every account you own, quickly, from your phone.</p>
+        <p>Both yearly plans cost eight months of the monthly price, so paying for a year works out <strong>four months free</strong>.</p>
 
         <h2>What each plan includes</h2>
         <ul>
-          <li><strong>Free</strong> — 2 channels, 10 posts a month, 5 scheduled posts.</li>
-          <li><strong>Creator, $9.99/month or $79.99/year</strong> — 3 channels, 100 posts a month, 50 scheduled posts, per-platform captions and placements, one year of post history.</li>
-          <li><strong>Pro, $19.99/month or $159.99/year</strong> — every channel BeamLoop supports, 500 posts a month, up to 1,000 scheduled posts, Launch Drops, unlimited post history.</li>
+          <li><strong>Free</strong> — 2 channels, 10 posts a month, 5 scheduled posts, 30 days of post history.</li>
+          <li><strong>Creator</strong> — 3 channels, 100 posts a month, 50 scheduled posts, per-platform captions and placements, one year of post history.</li>
+          <li><strong>Pro</strong> — every channel BeamLoop supports, 500 posts a month, up to 1,000 scheduled posts, Launch Drops, unlimited post history.</li>
         </ul>
-        <p>Both yearly plans cost eight months of the monthly price, so a year works out four months free.</p>
+
+        <h2>Scheduled, or actually published?</h2>
+        <p>Worth checking with any tool you consider: whether it publishes video <em>directly</em> to each platform, or sends you a notification at the scheduled time expecting you to finish the post by hand. The second is a reminder, not automation — your posting still depends on you being awake and holding your phone.</p>
+        <p>BeamLoop publishes to your connected accounts directly. You approve once, when you create the post.</p>
+
+        <h2>Common questions</h2>
+        <details><summary>Does adding a channel cost more?</summary><p>No. Each plan includes a set number of channels and the price does not change with how many you connect or how often you publish to them.</p></details>
+        <details><summary>Can I switch between plans?</summary><p>Yes. Upgrades take effect immediately and the App Store credits the unused part of your current period. Downgrades and changes of billing period take effect when your current period ends.</p></details>
+        <details><summary>How do I cancel?</summary><p>Open Accounts, choose Plans, then Manage Subscription. Apple handles payment and cancellation. Deleting your BeamLoop account or removing the app does not cancel an active subscription.</p></details>
+        <details><summary>What happens when I hit a plan limit?</summary><p>Publishing pauses for the rest of the month rather than charging you extra. Nothing is billed beyond your plan price.</p></details>
+        <p>Prices shown are in USD. The App Store displays the price in your own currency, along with the billing period, before you confirm any purchase.</p>
         ${storeCta()}
-        <p class="muted" style="font-size:.9rem">${PRICE_CHECKED}</p>
       </article>`,
   });
 }
@@ -768,7 +762,7 @@ export function sitemapXml() {
   const paths = [
     "/",
     "/support",
-    "/compare/buffer-alternative",
+    "/pricing",
     "/guides/post-tiktok-instagram-at-once",
     "/guides/cross-post-reels-shorts-tiktok",
     "/account-deletion",
