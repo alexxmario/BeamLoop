@@ -41,6 +41,17 @@ const PRODUCTS = {
 } as const;
 const ALL_PRODUCT_IDS = Object.values(PRODUCTS).flatMap(Object.values);
 
+// What Free actually includes. Shown as its own card rather than left implied:
+// somebody deciding whether to pay needs to see what they already have, and
+// "2 channels, 10 posts" is a real offer rather than a teaser.
+const FREE_FEATURES = [
+  "2 connected channels",
+  "10 posts each month",
+  "5 scheduled posts",
+  "Instagram Post, Reel, or Story",
+  "30 days of post history",
+];
+
 const FEATURES: Record<Exclude<PlanId, "free">, string[]> = {
   creator: [
     "3 connected channels",
@@ -254,6 +265,12 @@ export default function PlansScreen({ tabMode = false }: { tabMode?: boolean }) 
   // direction, and the difference is money: an upgrade starts now and credits
   // the unused remainder, a downgrade waits for the period to end. Someone
   // already paying deserves to know which before the sheet opens.
+  // Concrete rather than abstract: "3 of 10 posts used this month" tells a
+  // free user where they stand far better than the limit alone.
+  const usageLine = billing
+    ? `${billing.usage.postsThisMonth} OF ${billing.entitlement.limits.postsPerMonth} POSTS USED THIS MONTH`
+    : null;
+
   const RANK = { free: 0, creator: 1, pro: 2 } as const;
   const changeSummary = (plan: "creator" | "pro") => {
     if (currentPlan === "free" || !currentProductId) return null;
@@ -402,6 +419,41 @@ export default function PlansScreen({ tabMode = false }: { tabMode?: boolean }) 
             connection and pull up this screen again in a moment.
           </Text>
         )}
+
+        {/* Free, stated plainly. Nothing to buy here — the point is that a
+            free account can see exactly where it stands before deciding. */}
+        <View
+          style={{
+            padding: spacing.xl,
+            gap: spacing.md,
+            borderRadius: radius.card,
+            backgroundColor: palette.sheet,
+            borderWidth: 1,
+            borderColor: currentPlan === "free" ? palette.borderHair : palette.borderFaint,
+          }}
+        >
+          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <Text style={{ ...type.displayMd, color: palette.text }}>Free</Text>
+            {currentPlan === "free" && (
+              <Text style={{ ...type.mono, color: palette.success }}>CURRENT</Text>
+            )}
+          </View>
+          <Text style={{ ...type.displayTitle, color: palette.text }}>
+            $0
+            <Text style={{ ...type.bodySm, color: palette.textSecondary }}>
+              {" "}
+              / forever
+            </Text>
+          </Text>
+          {FREE_FEATURES.map((feature) => (
+            <Text key={feature} style={{ ...type.bodySm, color: palette.textSecondary }}>
+              ✓ {feature}
+            </Text>
+          ))}
+          {currentPlan === "free" && usageLine && (
+            <Text style={{ ...type.monoMeta, color: palette.textLabel }}>{usageLine}</Text>
+          )}
+        </View>
 
         {(["creator", "pro"] as const).map((plan) => {
           const sku = PRODUCTS[plan][period];

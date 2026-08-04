@@ -22,10 +22,12 @@ import {
   fetchConnections,
   fetchConnectUrl,
 } from "../../src/api/beamloop";
+import { fetchBillingStatus } from "../../src/api/beamloop";
 import { API_BASE_URL } from "../../src/api/client";
 import {
   PLATFORM_LABELS,
   isComingSoon,
+  type BillingStatus,
   type Connection,
   type Platform,
 } from "../../src/api/types";
@@ -64,6 +66,7 @@ export default function ConnectionsScreen() {
   // The failure itself is reported in a notice; this only stops the initial
   // spinner from running forever when the very first load fails.
   const [loadFailed, setLoadFailed] = useState(false);
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
   const notice = useNotice();
   const [managing, setManaging] = useState<Platform | null>(null);
   // Platform currently in the OAuth handoff (drives sheet + OPENING state)
@@ -100,6 +103,11 @@ export default function ConnectionsScreen() {
   useFocusEffect(
     useCallback(() => {
       load();
+      // What the plan actually gives, on the first screen of the app. A failure
+      // here is silent — the strip simply doesn't render.
+      fetchBillingStatus()
+        .then(setBilling)
+        .catch(() => {});
     }, [load])
   );
 
@@ -281,6 +289,13 @@ export default function ConnectionsScreen() {
         </View>
       </View>
 
+      {billing && (
+        <PlanStrip
+          billing={billing}
+          onPress={() => router.push("/plans")}
+        />
+      )}
+
       <FlatList
         data={connections ?? []}
         keyExtractor={(item) => item.platform}
@@ -352,6 +367,71 @@ export default function ConnectionsScreen() {
 }
 
 // ---------------------------------------------------------------- pieces
+
+/**
+ * What this account gets, on the first screen rather than buried in Plans.
+ *
+ * A free user should never have to go looking for what "free" means, or
+ * discover their monthly limit by hitting it. Naming the plan, the posts left,
+ * and the channel allowance turns the paywall from a surprise into a choice.
+ */
+function PlanStrip({
+  billing,
+  onPress,
+}: {
+  billing: BillingStatus;
+  onPress: () => void;
+}) {
+  const { plan, limits } = billing.entitlement;
+  const used = billing.usage.postsThisMonth;
+  const left = Math.max(limits.postsPerMonth - used, 0);
+  const name = plan === "free" ? "Free" : plan === "creator" ? "Creator" : "Pro";
+  // Running low is worth flagging before the post that gets refused.
+  const low = left <= Math.max(Math.round(limits.postsPerMonth * 0.2), 1);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${name} plan, ${left} posts left this month. See plans.`}
+      onPress={onPress}
+      style={{
+        marginHorizontal: spacing.screenX,
+        marginBottom: spacing.md,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.lg,
+        borderRadius: radius.cell,
+        backgroundColor: palette.strip,
+        borderWidth: 1,
+        borderColor: low ? palette.dangerBorderSoft : palette.borderFaint,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: spacing.md,
+      }}
+    >
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text
+          style={{
+            ...type.monoMeta,
+            color: palette.textLabel,
+            letterSpacing: tracking(monoTracking.label, type.monoMeta.fontSize),
+          }}
+        >
+          {name.toUpperCase()} PLAN
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={{ ...type.itemTitleSm, color: palette.text, marginTop: 3 }}
+        >
+          {left} of {limits.postsPerMonth} posts left · {limits.channels} channels
+        </Text>
+      </View>
+      <Text style={{ ...type.monoMeta, color: palette.textSecondary }}>
+        {plan === "pro" ? "MANAGE" : "UPGRADE"}
+      </Text>
+    </Pressable>
+  );
+}
 
 function ConnectionRow({
   item,
