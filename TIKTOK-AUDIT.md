@@ -112,6 +112,25 @@ TikTok's UX requirements, and where BeamLoop meets them
 | Creator has full control of the caption | Shared caption plus a per-platform override |
 | Reflects a live `creator_info` query | Fetched each time TikTok is selected; only the privacy levels TikTok returns are offered, and interactions the creator disabled on their account are greyed out |
 
+## The submission text
+
+Paste this into "Explain how each product and scope works within your app or
+website". It is 997 characters against their 1000 limit, so edit carefully.
+
+> BeamLoop is a live iPhone app (App Store ID 6794000898) that publishes one video to several social accounts from a single upload. The TikTok integration is our own: we call the Content Posting API directly and send the video with FILE_UPLOAD.
+>
+> The demo shows the production app: opening BeamLoop, connecting TikTok via OAuth, writing a caption, choosing the post's settings, and publishing.
+>
+> Login Kit + user.info.basic - the posting screen queries creator_info and shows the creator's nickname and avatar, so they see which account gets the post. Only the privacy levels creator_info returns are offered, and disabled interactions are greyed out.
+>
+> video.publish - the creator selects a privacy level (nothing pre-selected; the post cannot be sent until they choose), sets comment/duet/stitch permissions, and declares commercial content where it applies, with the required consent text.
+>
+> The demo runs in our sandbox on a private account, so the post is SELF_ONLY as an unaudited client requires.
+
+Two scopes only — `user.info.basic` and `video.publish` — because TikTok delays
+a review over any scope it cannot see demonstrated. Do not add `video.upload` or
+`video.list`; nothing in the app uses them.
+
 ## Where the code lives
 
 - `server/src/lib/tiktok.ts` — OAuth, `creator_info`, `FILE_UPLOAD` init, chunked
