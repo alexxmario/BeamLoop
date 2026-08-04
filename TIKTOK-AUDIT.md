@@ -67,6 +67,15 @@ Nothing else changes. No Post for Me plan upgrade, no White Label project. Until
 both are set, TikTok reports itself unavailable and the connect button returns a
 clear "TikTok isn't available yet" rather than failing at publish time.
 
+### 3b. Swap to production credentials after approval — you
+
+A sandbox issues its own client key, recognisable by an `sb` prefix
+(`sbawjb1yepj52rbxzs`). It only works for the accounts added as sandbox target
+users, so leaving it in place after approval keeps TikTok limited to those ten
+accounts. Replace `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET` with the
+production pair from the app's Credentials panel once the audit passes, and make
+sure the same redirect URI is registered on the production app too.
+
 ### 4. Flip the ceiling — one env var
 
 `TIKTOK_PRIVACY` on Railway is currently `SELF_ONLY`, which the server treats as
