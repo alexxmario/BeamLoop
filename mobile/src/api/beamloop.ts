@@ -118,7 +118,7 @@ function baseUploadForm({
   for (const [platform, placement] of Object.entries(placements ?? {})) {
     if (placement) form.append(`${platform}_placement`, placement);
   }
-  if (tiktok) {
+  if (tiktok?.privacy) {
     form.append("tiktok_privacy", tiktok.privacy);
     form.append("tiktok_allow_comment", String(tiktok.allowComment));
     form.append("tiktok_allow_duet", String(tiktok.allowDuet));

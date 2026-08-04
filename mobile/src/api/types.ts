@@ -59,22 +59,30 @@ export type PostPlacement = "timeline" | "reels" | "stories";
  * part of the composer and travel with each post.
  */
 export interface TikTokOptions {
-  privacy: "public" | "private";
+  // null until the creator picks one. TikTok's Content Posting audit requires
+  // the privacy selector to have NO default — the creator must choose, and a
+  // post can't be sent until they have.
+  privacy: "public" | "private" | null;
   allowComment: boolean;
   allowDuet: boolean;
   allowStitch: boolean;
+  // UI-only: the "this promotes a brand" switch. Never sent — the server reads
+  // the two specific disclosures below. When this is on, TikTok requires at
+  // least one of them to be selected.
+  discloseCommercial: boolean;
   discloseYourBrand: boolean;
   discloseBrandedContent: boolean;
   isAiGenerated: boolean;
 }
 
-// TikTok's own defaults: visible to everyone, every interaction allowed,
-// nothing declared as commercial.
+// TikTok's audit requires nothing to be pre-selected: no privacy level, no
+// interaction checked, nothing declared commercial.
 export const DEFAULT_TIKTOK_OPTIONS: TikTokOptions = {
-  privacy: "public",
-  allowComment: true,
-  allowDuet: true,
-  allowStitch: true,
+  privacy: null,
+  allowComment: false,
+  allowDuet: false,
+  allowStitch: false,
+  discloseCommercial: false,
   discloseYourBrand: false,
   discloseBrandedContent: false,
   isAiGenerated: false,

@@ -29,7 +29,9 @@ export interface StoredMedia {
  * rather than coming from server configuration.
  */
 export interface TikTokOptions {
-  privacy: "public" | "private";
+  // Null only while a request is being validated: TikTok's rules require the
+  // creator to pick, so a stored post always has a real value.
+  privacy: "public" | "private" | null;
   allowComment: boolean;
   allowDuet: boolean;
   allowStitch: boolean;

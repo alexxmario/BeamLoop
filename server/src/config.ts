@@ -42,6 +42,17 @@ const envSchema = z.object({
   // allow a per-request override).
   CONNECT_REDIRECT_URL: z.string().default("beamloop://connections/callback"),
   CORS_ORIGIN: z.string().optional(),
+  // Site-ownership verification for platform developer portals (TikTok's
+  // "URL prefix" method, and the same shape Google/Meta use): they hand you a
+  // filename and a string, and check the file is served from the site root.
+  // Kept in env so re-verifying — or verifying a second platform — is a config
+  // change rather than a deploy. Filename only, no path separators.
+  SITE_VERIFICATION_FILENAME: z
+    .string()
+    .trim()
+    .regex(/^[\w.-]{1,128}$/, "SITE_VERIFICATION_FILENAME must be a bare filename")
+    .optional(),
+  SITE_VERIFICATION_CONTENT: z.string().optional(),
   // Public website details. Override these in Railway with the exact legal
   // operator and monitored support inbox used for the App Store listing.
   PUBLIC_LEGAL_NAME: z

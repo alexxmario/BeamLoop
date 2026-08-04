@@ -252,17 +252,36 @@ function buildPreflightChecks(input: {
   }
 
   if (selected.includes("tiktok")) {
-    // A private TikTok post is a legitimate choice but a surprising outcome,
-    // so it is called out rather than left to be discovered on the app.
-    checks.push(
-      tiktok.privacy === "private"
-        ? {
-            label: "TikTok",
-            detail: "Only you will see this post",
-            level: "warn",
-          }
-        : { label: "TikTok", detail: "Public to everyone", level: "pass" }
-    );
+    // TikTok's Content Posting rules require the creator to have actively made
+    // these choices before anything is sent, so an unmade choice blocks the
+    // post rather than being quietly defaulted.
+    if (tiktok.privacy === null) {
+      checks.push({
+        label: "TikTok",
+        detail: "Choose who can see this post",
+        level: "block",
+      });
+    } else if (
+      tiktok.discloseCommercial &&
+      !tiktok.discloseYourBrand &&
+      !tiktok.discloseBrandedContent
+    ) {
+      checks.push({
+        label: "TikTok",
+        detail: "Say whether it promotes your brand or is a paid partnership",
+        level: "block",
+      });
+    } else {
+      checks.push(
+        tiktok.privacy === "private"
+          ? {
+              label: "TikTok",
+              detail: "Only you will see this post",
+              level: "warn",
+            }
+          : { label: "TikTok", detail: "Public to everyone", level: "pass" }
+      );
+    }
   }
 
   if (scheduledAt) {
@@ -894,6 +913,7 @@ export default function ComposeModal() {
           <TikTokOptionsCard
             value={tiktok}
             mediaKind={media?.kind ?? null}
+            account={connections.find((c) => c.platform === "tiktok")}
             onChange={(next) => {
               setTiktok(next);
               setIdempotencyKey(createIdempotencyKey());
@@ -1744,22 +1764,37 @@ function OptionToggle({
 /**
  * TikTok's posting choices.
  *
- * TikTok requires the creator, not the app, to decide who sees a post and to
- * declare commercial content — so these live in the composer instead of in
- * server configuration, and they are free on every plan for the same reason
- * Instagram's placement is: they are part of posting, not an upgrade.
+ * The shape of this card is dictated by TikTok's Content Posting API UX rules,
+ * which their audit checks directly — so the details here are requirements, not
+ * preferences:
+ *
+ *  - the destination account is named, so nobody posts to the wrong one
+ *  - the privacy level starts unselected; the creator must choose it
+ *  - no interaction is enabled by default
+ *  - commercial content is declared behind one switch, and declaring it forces
+ *    a choice between promoting yourself and a paid partnership
+ *  - the consent line changes with that choice
+ *
+ * Free on every plan, for the same reason Instagram's placement is: this is
+ * part of posting, not an upgrade.
  */
 function TikTokOptionsCard({
   value,
   mediaKind,
+  account,
   onChange,
 }: {
   value: TikTokOptions;
   mediaKind: Media["kind"] | null;
+  account: Connection | undefined;
   onChange: (value: TikTokOptions) => void;
 }) {
   const set = (patch: Partial<TikTokOptions>) => onChange({ ...value, ...patch });
-  const disclosing = value.discloseYourBrand || value.discloseBrandedContent;
+  const handle =
+    account?.details?.username ||
+    account?.details?.display_name ||
+    "your TikTok account";
+  const avatar = account?.details?.social_images;
 
   return (
     <View
@@ -1772,23 +1807,39 @@ function TikTokOptionsCard({
         gap: spacing.lg,
       }}
     >
+      {/* TikTok requires the destination account to be named on this screen. */}
       <View style={[s.row, { gap: spacing.sm }]}>
-        <View
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: radius.badge,
-            backgroundColor: platformHue.tiktok,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <PlatformGlyph platform="tiktok" size={16} color={palette.console} />
-        </View>
-        <View>
-          <Text style={s.sectionLabel}>TikTok</Text>
-          <Text style={{ ...type.itemTitleSm, color: palette.text, marginTop: 2 }}>
-            Who sees it, and what they can do.
+        {avatar ? (
+          <Image
+            source={{ uri: avatar }}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              backgroundColor: palette.sheet,
+            }}
+          />
+        ) : (
+          <View
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              backgroundColor: platformHue.tiktok,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <PlatformGlyph platform="tiktok" size={18} color={palette.console} />
+          </View>
+        )}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={s.sectionLabel}>Posting to TikTok as</Text>
+          <Text
+            numberOfLines={1}
+            style={{ ...type.itemTitleSm, color: palette.text, marginTop: 2 }}
+          >
+            {handle}
           </Text>
         </View>
       </View>
@@ -1802,8 +1853,8 @@ function TikTokOptionsCard({
               { value: "private" as const, label: "Only me", detail: "Private" },
             ]
           ).map((option) => {
-            // TikTok treats a paid partnership as advertising, and advertising
-            // can't be hidden, so private is unavailable while it's declared.
+            // A paid partnership is advertising, and advertising can't be
+            // hidden — TikTok requires "only me" to be unavailable here.
             const blocked =
               option.value === "private" && value.discloseBrandedContent;
             const active = value.privacy === option.value;
@@ -1844,6 +1895,11 @@ function TikTokOptionsCard({
             );
           })}
         </View>
+        {value.privacy === null && (
+          <Text style={{ ...type.monoMeta, color: palette.warning }}>
+            REQUIRED — TIKTOK NEEDS YOU TO CHOOSE
+          </Text>
+        )}
         {value.discloseBrandedContent && (
           <Text style={{ ...type.monoMeta, color: palette.textLabel }}>
             Paid partnerships have to be public on TikTok.
@@ -1875,28 +1931,58 @@ function TikTokOptionsCard({
       </View>
 
       <View style={{ gap: spacing.md }}>
-        <Text style={s.sectionLabel}>Disclosure</Text>
         <OptionToggle
-          label="Promotes your own brand"
-          detail="Your business, product, or service"
-          value={value.discloseYourBrand}
-          onChange={(next) => set({ discloseYourBrand: next })}
-        />
-        <OptionToggle
-          label="Paid partnership"
-          detail="Someone else paid for this post"
-          value={value.discloseBrandedContent}
+          label="Disclose video content"
+          detail="Promotes yourself, a brand, a product, or a service"
+          value={value.discloseCommercial}
           onChange={(next) =>
-            set({
-              discloseBrandedContent: next,
-              // Turning this on forces the post public rather than failing at
-              // TikTok with an error the creator can't act on.
-              ...(next && value.privacy === "private"
-                ? { privacy: "public" as const }
-                : {}),
-            })
+            set(
+              next
+                ? { discloseCommercial: true }
+                : // Turning the switch off retracts both declarations with it.
+                  {
+                    discloseCommercial: false,
+                    discloseYourBrand: false,
+                    discloseBrandedContent: false,
+                  }
+            )
           }
         />
+
+        {value.discloseCommercial && (
+          <View style={{ gap: spacing.md, paddingLeft: spacing.md }}>
+            <OptionToggle
+              label="Your brand"
+              detail="Promoting yourself or your own business"
+              value={value.discloseYourBrand}
+              onChange={(next) => set({ discloseYourBrand: next })}
+            />
+            <OptionToggle
+              label="Branded content"
+              detail="A third party paid you for this post"
+              value={value.discloseBrandedContent}
+              onChange={(next) =>
+                set({
+                  discloseBrandedContent: next,
+                  // Declaring a paid partnership makes the post public rather
+                  // than failing at TikTok with an error nobody can act on.
+                  ...(next && value.privacy === "private"
+                    ? { privacy: "public" as const }
+                    : {}),
+                })
+              }
+            />
+            {/* TikTok specifies this wording, and which label gets applied. */}
+            <Text style={{ ...type.monoMeta, color: palette.textLabel }}>
+              {value.discloseBrandedContent
+                ? "Your post will be labeled “Paid partnership”."
+                : value.discloseYourBrand
+                  ? "Your post will be labeled “Promotional content”."
+                  : "PICK AT LEAST ONE TO PUBLISH"}
+            </Text>
+          </View>
+        )}
+
         <OptionToggle
           label="Made with AI"
           detail="Generated or substantially edited by AI"
@@ -1905,7 +1991,7 @@ function TikTokOptionsCard({
         />
       </View>
 
-      {disclosing && (
+      {(value.discloseYourBrand || value.discloseBrandedContent) && (
         <Text style={{ ...type.monoMeta, color: palette.textLabel }}>
           {value.discloseBrandedContent
             ? "By posting, you agree to TikTok's Branded Content Policy and Music Usage Confirmation."

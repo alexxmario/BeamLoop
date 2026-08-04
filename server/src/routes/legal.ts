@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { FastifyInstance, FastifyReply } from "fastify";
+import { config } from "../config.js";
 import { passwordResetStore } from "../lib/passwordResets.js";
 import {
   accountDeletionPage,
@@ -111,6 +112,17 @@ export default async function legalRoutes(app: FastifyInstance) {
   app.get("/favicon.svg", async (_req, reply) =>
     reply.redirect("/assets/app-icon.png", 308)
   );
+  // Platform site-ownership check. Registered as the exact path they issued, so
+  // it can't shadow any other route, and only when both halves are configured.
+  if (config.SITE_VERIFICATION_FILENAME && config.SITE_VERIFICATION_CONTENT) {
+    app.get(`/${config.SITE_VERIFICATION_FILENAME}`, async (_req, reply) =>
+      reply
+        .type("text/plain; charset=utf-8")
+        .header("cache-control", "no-cache")
+        .send(config.SITE_VERIFICATION_CONTENT)
+    );
+  }
+
   app.get("/robots.txt", async (_req, reply) =>
     reply.type("text/plain; charset=utf-8").send(robotsText())
   );

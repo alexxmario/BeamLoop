@@ -117,20 +117,32 @@ function parsePlacements(fields: Record<string, string[]>) {
   return placements;
 }
 
-// TikTok posting options. Absent fields fall back to TikTok's own defaults
-// (public, every interaction allowed, nothing disclosed) so an older client
-// that sends none of this keeps working.
+// TikTok posting options. Nothing is enabled by default: TikTok's audit
+// requires that no interaction is pre-checked and nothing is pre-declared, so
+// an absent field means "not chosen", never "yes".
+//
+// TIKTOK_PRIVACY is a CEILING, not a default: an unaudited TikTok client may
+// only publish SELF_ONLY, so the deployment caps what any creator can choose.
+// Within that ceiling the creator's own choice wins — treating the config as a
+// default silently republished "Everyone" as a private post.
 function parseTikTokOptions(fields: Record<string, string[]>): TikTokOptions {
   const flag = (name: string, fallback: boolean) => {
     const value = fields[name]?.[0];
     return value === undefined ? fallback : value === "true";
   };
-  const privacy = fields.tiktok_privacy?.[0];
+  const requested = fields.tiktok_privacy?.[0];
+  const chosen = requested === "public" || requested === "private" ? requested : null;
   return {
-    privacy: privacy === "private" ? "private" : config.TIKTOK_PRIVACY,
-    allowComment: flag("tiktok_allow_comment", true),
-    allowDuet: flag("tiktok_allow_duet", true),
-    allowStitch: flag("tiktok_allow_stitch", true),
+    // A null here means the creator never chose, which validation rejects.
+    privacy:
+      chosen === null
+        ? null
+        : config.TIKTOK_PRIVACY === "private"
+          ? "private"
+          : chosen,
+    allowComment: flag("tiktok_allow_comment", false),
+    allowDuet: flag("tiktok_allow_duet", false),
+    allowStitch: flag("tiktok_allow_stitch", false),
     discloseYourBrand: flag("tiktok_disclose_your_brand", false),
     discloseBrandedContent: flag("tiktok_disclose_branded_content", false),
     isAiGenerated: flag("tiktok_is_ai_generated", false),
@@ -140,6 +152,11 @@ function parseTikTokOptions(fields: Record<string, string[]>): TikTokOptions {
 // TikTok treats a paid partnership as advertising, and advertising cannot be
 // hidden — the platform rejects branded content on a private post.
 function validateTikTokOptions(options: TikTokOptions): string | undefined {
+  // TikTok's Content Posting rules give this choice to the creator and forbid a
+  // pre-selected default, so there is nothing sensible to fall back to.
+  if (options.privacy === null) {
+    return "Choose who can see your TikTok post before publishing.";
+  }
   if (options.discloseBrandedContent && options.privacy === "private") {
     return "TikTok branded content has to be visible to everyone. Make the post public or turn off the paid-partnership disclosure.";
   }
@@ -373,6 +390,8 @@ async function publish(opts: {
         // back to the platform defaults.
         if (p === "tiktok") {
           cfg.privacy_status = tiktokOptions?.privacy ?? config.TIKTOK_PRIVACY;
+          // Validation guarantees a chosen privacy for any post carrying
+          // options; this only covers the no-options path.
           if (tiktokOptions) {
             cfg.allow_comment = tiktokOptions.allowComment;
             cfg.disclose_your_brand = tiktokOptions.discloseYourBrand;
