@@ -29,6 +29,7 @@ import {
   type Connection,
   type Platform,
 } from "../../src/api/types";
+import { useNotice } from "../../src/components/Notice";
 import { PlatformTile } from "../../src/components/PlatformTile";
 import { SpinArc } from "../../src/components/SpinArc";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
@@ -60,7 +61,10 @@ export default function ConnectionsScreen() {
   const insets = useSafeAreaInsets();
   const [connections, setConnections] = useState<Connection[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The failure itself is reported in a notice; this only stops the initial
+  // spinner from running forever when the very first load fails.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const notice = useNotice();
   const [managing, setManaging] = useState<Platform | null>(null);
   // Platform currently in the OAuth handoff (drives sheet + OPENING state)
   const [handoff, setHandoff] = useState<Platform | null>(null);
@@ -68,15 +72,16 @@ export default function ConnectionsScreen() {
 
   const load = useCallback(async () => {
     try {
-      setError(null);
       const next = await fetchConnections();
       setConnections(next);
+      setLoadFailed(false);
       return next;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load connections");
+      setLoadFailed(true);
+      notice(e instanceof Error ? e.message : "Failed to load connections");
       return null;
     }
-  }, []);
+  }, [notice]);
 
   const refreshUntilConnected = useCallback(
     async (platform: Platform) => {
@@ -114,7 +119,6 @@ export default function ConnectionsScreen() {
     if (sessionOpen.current) return;
     sessionOpen.current = true;
     setHandoff(platform);
-    setError(null);
     try {
       const { access_url } = await fetchConnectUrl([platform]);
       const result = await WebBrowser.openAuthSessionAsync(access_url, REDIRECT_URL);
@@ -143,13 +147,13 @@ export default function ConnectionsScreen() {
       const connected = await refreshUntilConnected(platform);
       if (!connected) {
         setHandoff(null);
-        setError(
+        notice(
           `${PLATFORM_LABELS[platform]} did not finish connecting. Try again, and make sure the provider's final confirmation succeeds.`
         );
       }
     } catch (e) {
       setHandoff(null);
-      setError(e instanceof Error ? e.message : "Could not open sign-in");
+      notice(e instanceof Error ? e.message : "Could not open sign-in");
     } finally {
       sessionOpen.current = false;
     }
@@ -157,14 +161,13 @@ export default function ConnectionsScreen() {
 
   const reconnectUnavailable = async (item: Connection) => {
     setManaging(item.platform);
-    setError(null);
     try {
       // Remove the unusable provider record first so a fresh OAuth grant
       // cannot be mistaken for the account that just failed.
       await disconnectPlatform(item.platform);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't reset this connection");
+      notice(e instanceof Error ? e.message : "Couldn't reset this connection");
       setManaging(null);
       return;
     }
@@ -184,10 +187,9 @@ export default function ConnectionsScreen() {
   const manageConnection = (item: Connection) => {
     const disconnect = () => {
       setManaging(item.platform);
-      setError(null);
       disconnectPlatform(item.platform)
         .then(load)
-        .catch((e) => setError(e instanceof Error ? e.message : "Couldn't disconnect account"))
+        .catch((e) => notice(e instanceof Error ? e.message : "Couldn't disconnect account"))
         .finally(() => setManaging(null));
     };
     Alert.alert(
@@ -202,7 +204,7 @@ export default function ConnectionsScreen() {
 
   const openPublicPage = (path: "/support" | "/legal/privacy" | "/legal/terms") =>
     Linking.openURL(`${API_BASE_URL}${path}`).catch(() =>
-      setError("Couldn't open that page. Please try again.")
+      notice("Couldn't open that page. Please try again.")
     );
 
   // "Soon" platforms don't count toward the connected/total progress.
@@ -210,7 +212,7 @@ export default function ConnectionsScreen() {
   const connectedCount = connectable.filter((c) => c.connected).length;
   const total = connectable.length;
 
-  if (!connections && !error) {
+  if (!connections && !loadFailed) {
     return (
       <SafeAreaView
         style={[s.screen, { alignItems: "center", justifyContent: "center" }]}
@@ -278,12 +280,6 @@ export default function ConnectionsScreen() {
           </Text>
         </View>
       </View>
-
-      {error && (
-        <Text style={[s.errorText, { paddingHorizontal: spacing.xxl, marginBottom: spacing.sm }]}>
-          {error}
-        </Text>
-      )}
 
       <FlatList
         data={connections ?? []}

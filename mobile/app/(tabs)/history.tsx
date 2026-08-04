@@ -19,6 +19,7 @@ import {
   type Platform,
   type PostRecord,
 } from "../../src/api/types";
+import { useNotice } from "../../src/components/Notice";
 import { SpinArc } from "../../src/components/SpinArc";
 import { PlatformGlyph } from "../../src/components/PlatformGlyph";
 import { Stripes } from "../../src/components/Stripes";
@@ -57,17 +58,21 @@ export default function HistoryScreen() {
   const [retrying, setRetrying] = useState<string | null>(null);
   const [canceling, setCanceling] = useState<string | null>(null);
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
+  // The failure itself is reported in a notice; this only stops the initial
+  // spinner from running forever when the very first load fails.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const notice = useNotice();
 
   const load = useCallback(async () => {
     try {
-      setError(null);
       setPosts(await fetchHistory());
+      setLoadFailed(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load history");
+      setLoadFailed(true);
+      notice(e instanceof Error ? e.message : "Failed to load history");
     }
-  }, []);
+  }, [notice]);
 
   useFocusEffect(
     useCallback(() => {
@@ -118,16 +123,15 @@ export default function HistoryScreen() {
   // or every row re-renders whenever any one of them expands.
   const retry = useCallback(async (post: PostRecord) => {
     setRetrying(post.id);
-    setError(null);
     try {
       await retryPost(post.id);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Retry failed");
+      notice(e instanceof Error ? e.message : "Retry failed");
     } finally {
       setRetrying(null);
     }
-  }, [load]);
+  }, [load, notice]);
 
   const cancel = useCallback((post: PostRecord) => {
     Alert.alert(
@@ -142,12 +146,11 @@ export default function HistoryScreen() {
           style: "destructive",
           onPress: async () => {
             setCanceling(post.id);
-            setError(null);
             try {
               await cancelScheduledPost(post.id);
               await load();
             } catch (e) {
-              setError(e instanceof Error ? e.message : "Couldn't cancel the post");
+              notice(e instanceof Error ? e.message : "Couldn't cancel the post");
             } finally {
               setCanceling(null);
             }
@@ -155,7 +158,7 @@ export default function HistoryScreen() {
         },
       ]
     );
-  }, [load]);
+  }, [load, notice]);
 
   const toggleExpanded = useCallback((post: PostRecord) => {
     setExpandedPostId((current) => (current === post.id ? null : post.id));
@@ -184,7 +187,7 @@ export default function HistoryScreen() {
     return true;
   });
 
-  if (!posts && !error) {
+  if (!posts && !loadFailed) {
     return (
       <SafeAreaView
         style={[s.screen, { alignItems: "center", justifyContent: "center" }]}
@@ -222,12 +225,6 @@ export default function HistoryScreen() {
           />
         </View>
       </View>
-
-      {error && (
-        <Text style={[s.errorText, { paddingHorizontal: spacing.xxl, marginBottom: spacing.sm }]}>
-          {error}
-        </Text>
-      )}
 
       <FlatList
         data={visible}

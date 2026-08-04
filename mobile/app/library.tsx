@@ -18,6 +18,7 @@ import {
   type Platform,
 } from "../src/api/types";
 import { useAuth } from "../src/auth/AuthContext";
+import { useNotice } from "../src/components/Notice";
 import {
   deleteChannelGroup,
   listChannelGroups,
@@ -59,7 +60,7 @@ export default function LibraryScreen({ tabMode = false }: { tabMode?: boolean }
     new Set()
   );
   const [editingCollection, setEditingCollection] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const notice = useNotice();
 
   const loadLocal = useCallback(() => {
     if (!user) return;
@@ -79,9 +80,9 @@ export default function LibraryScreen({ tabMode = false }: { tabMode?: boolean }
           )
         )
         .catch((e) =>
-          setError(e instanceof Error ? e.message : "Couldn't load your channels")
+          notice(e instanceof Error ? e.message : "Couldn't load your channels")
         );
-    }, [loadLocal])
+    }, [loadLocal, notice])
   );
 
   const resetIdeaForm = () => {
@@ -96,9 +97,8 @@ export default function LibraryScreen({ tabMode = false }: { tabMode?: boolean }
       else saveIdea(user.id, ideaText);
       resetIdeaForm();
       loadLocal();
-      setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't save that idea");
+      notice(e instanceof Error ? e.message : "Couldn't save that idea");
     }
   };
 
@@ -124,9 +124,8 @@ export default function LibraryScreen({ tabMode = false }: { tabMode?: boolean }
       }
       resetCollectionForm();
       loadLocal();
-      setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't save that collection");
+      notice(e instanceof Error ? e.message : "Couldn't save that collection");
     }
   };
 
@@ -234,12 +233,6 @@ export default function LibraryScreen({ tabMode = false }: { tabMode?: boolean }
             />
           </View>
         </View>
-
-        {error && (
-          <Text style={[s.errorText, { paddingHorizontal: spacing.screenX }]}>
-            {error}
-          </Text>
-        )}
 
         <ScrollView
           keyboardShouldPersistTaps="handled"

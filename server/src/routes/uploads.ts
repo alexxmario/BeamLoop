@@ -10,10 +10,16 @@ import {
   type MediaFile,
   type PostRecord,
   type StoredMedia,
+  type TikTokOptions,
 } from "../lib/posts.js";
-import { formatResetDate, subscriptionStore, usageForUser } from "../lib/plans.js";
+import {
+  formatResetDate,
+  gatedPlacements,
+  subscriptionStore,
+  usageForUser,
+} from "../lib/plans.js";
 import { notifyPostSettled } from "../lib/postNotifications.js";
-import { MEDIA_DIR, THUMBNAIL_DIR } from "../lib/paths.js";
+import { COVER_DIR, MEDIA_DIR, THUMBNAIL_DIR } from "../lib/paths.js";
 import {
   OAUTH_PLATFORMS,
   isReconnectError,
@@ -111,6 +117,35 @@ function parsePlacements(fields: Record<string, string[]>) {
   return placements;
 }
 
+// TikTok posting options. Absent fields fall back to TikTok's own defaults
+// (public, every interaction allowed, nothing disclosed) so an older client
+// that sends none of this keeps working.
+function parseTikTokOptions(fields: Record<string, string[]>): TikTokOptions {
+  const flag = (name: string, fallback: boolean) => {
+    const value = fields[name]?.[0];
+    return value === undefined ? fallback : value === "true";
+  };
+  const privacy = fields.tiktok_privacy?.[0];
+  return {
+    privacy: privacy === "private" ? "private" : config.TIKTOK_PRIVACY,
+    allowComment: flag("tiktok_allow_comment", true),
+    allowDuet: flag("tiktok_allow_duet", true),
+    allowStitch: flag("tiktok_allow_stitch", true),
+    discloseYourBrand: flag("tiktok_disclose_your_brand", false),
+    discloseBrandedContent: flag("tiktok_disclose_branded_content", false),
+    isAiGenerated: flag("tiktok_is_ai_generated", false),
+  };
+}
+
+// TikTok treats a paid partnership as advertising, and advertising cannot be
+// hidden — the platform rejects branded content on a private post.
+function validateTikTokOptions(options: TikTokOptions): string | undefined {
+  if (options.discloseBrandedContent && options.privacy === "private") {
+    return "TikTok branded content has to be visible to everyone. Make the post public or turn off the paid-partnership disclosure.";
+  }
+  return undefined;
+}
+
 function validateMedia(kind: "video" | "photos", media: MediaFile[]): string | undefined {
   if (kind === "video" && media.length !== 1) return "Upload exactly one video";
   if (media.some((file) => file.truncated)) return "A media file exceeds the 500 MB limit";
@@ -155,6 +190,8 @@ function publicPost(post: PostRecord) {
     userId: _userId,
     mediaFiles: _mediaFiles,
     thumbnailFile: _thumbnailFile,
+    // Holds an absolute path on the server's disk — never send it out.
+    instagramCoverFile: _instagramCoverFile,
     idempotencyKey: _idempotencyKey,
     pfmPostId: _pfmPostId,
     pfmExternalId: _pfmExternalId,
@@ -273,6 +310,8 @@ async function publish(opts: {
   kind: "video" | "photos";
   media: MediaFile[];
   placements?: Record<string, "timeline" | "reels" | "stories">;
+  instagramCover?: MediaFile;
+  tiktokOptions?: TikTokOptions;
   scheduledAt?: string;
   providerExternalId?: string;
   onProviderAccepted?: (
@@ -292,6 +331,8 @@ async function publish(opts: {
     kind,
     media,
     placements,
+    instagramCover,
+    tiktokOptions,
     scheduledAt,
     providerExternalId,
     onProviderAccepted,
@@ -327,8 +368,23 @@ async function publish(opts: {
         if ((p === "instagram" || p === "facebook") && placements?.[p]) {
           cfg.placement = placements[p];
         }
-        // TikTok requires a privacy level on every post.
-        if (p === "tiktok") cfg.privacy_status = config.TIKTOK_PRIVACY;
+        // TikTok requires a privacy level on every post. The rest is what the
+        // creator chose in the composer; older clients send nothing and fall
+        // back to the platform defaults.
+        if (p === "tiktok") {
+          cfg.privacy_status = tiktokOptions?.privacy ?? config.TIKTOK_PRIVACY;
+          if (tiktokOptions) {
+            cfg.allow_comment = tiktokOptions.allowComment;
+            cfg.disclose_your_brand = tiktokOptions.discloseYourBrand;
+            cfg.disclose_branded_content = tiktokOptions.discloseBrandedContent;
+            cfg.is_ai_generated = tiktokOptions.isAiGenerated;
+            // Duet and stitch are video-only concepts on TikTok.
+            if (kind === "video") {
+              cfg.allow_duet = tiktokOptions.allowDuet;
+              cfg.allow_stitch = tiktokOptions.allowStitch;
+            }
+          }
+        }
         if (Object.keys(cfg).length > 0) platformConfigurations[p] = cfg;
       }
 
@@ -344,6 +400,22 @@ async function publish(opts: {
         for (const f of media) {
           const blob = await openAsBlob(f.path, { type: f.mimetype });
           mediaUrls.push(await postForMe.uploadMedia(blob, f.mimetype));
+        }
+        // A cover is expressed as an Instagram-only override of the post media,
+        // carrying the same video URL plus a thumbnail. Every other platform
+        // keeps the untouched post-level media.
+        if (instagramCover && selected.includes("instagram") && mediaUrls[0]) {
+          const blob = await openAsBlob(instagramCover.path, {
+            type: instagramCover.mimetype,
+          });
+          const coverUrl = await postForMe.uploadMedia(
+            blob,
+            instagramCover.mimetype
+          );
+          platformConfigurations.instagram = {
+            ...platformConfigurations.instagram,
+            media: [{ url: mediaUrls[0], thumbnail_url: coverUrl }],
+          };
         }
         post = await postForMe.createPost({
           caption,
@@ -472,20 +544,33 @@ async function persistMedia(postId: string, files: MediaFile[]): Promise<StoredM
   return stored;
 }
 
+function imageExtension(mimetype: string) {
+  const value = mimetype.toLowerCase();
+  return value === "image/png" ? "png" : value === "image/webp" ? "webp" : "jpg";
+}
+
 async function persistThumbnail(postId: string, file: MediaFile): Promise<StoredMedia> {
   const dir = join(THUMBNAIL_DIR, postId);
   await fsp.mkdir(dir, { recursive: true });
-  const extension =
-    file.mimetype.toLowerCase() === "image/png"
-      ? "png"
-      : file.mimetype.toLowerCase() === "image/webp"
-        ? "webp"
-        : "jpg";
+  const extension = imageExtension(file.mimetype);
   const dest = join(dir, `preview.${extension}`);
   await fsp.copyFile(file.path, dest);
   return {
     path: dest,
     filename: `preview.${extension}`,
+    mimetype: file.mimetype,
+  };
+}
+
+async function persistCover(postId: string, file: MediaFile): Promise<StoredMedia> {
+  const dir = join(COVER_DIR, postId);
+  await fsp.mkdir(dir, { recursive: true });
+  const extension = imageExtension(file.mimetype);
+  const dest = join(dir, `cover.${extension}`);
+  await fsp.copyFile(file.path, dest);
+  return {
+    path: dest,
+    filename: `cover.${extension}`,
     mimetype: file.mimetype,
   };
 }
@@ -508,6 +593,9 @@ async function purgeExpiredMedia(): Promise<void> {
       ? join(post.mediaFiles[0].path, "..")
       : join(MEDIA_DIR, post.id);
     await fsp.rm(directory, { recursive: true, force: true });
+    // The cover is only meaningful while the post can still be re-sent, so it
+    // expires with the retry media rather than with the History preview.
+    await fsp.rm(join(COVER_DIR, post.id), { recursive: true, force: true });
     postStore.clearMedia(post.id);
   }
 }
@@ -607,9 +695,33 @@ export default async function uploadRoutes(app: FastifyInstance) {
           return reply.code(400).send({ error: "Use a JPEG, PNG, or WebP thumbnail" });
         }
 
+        // The Instagram cover the composer picked — either a frame lifted from
+        // the video or an image chosen from the library. Both arrive here as a
+        // plain image, so there is one path to validate and one to publish.
+        const covers = files.instagram_cover ?? [];
+        if (covers.length > 1) {
+          return reply.code(400).send({ error: "Upload exactly one Instagram cover" });
+        }
+        const cover = covers[0];
+        if (
+          cover &&
+          (cover.truncated || !PHOTO_TYPES.has(cover.mimetype.toLowerCase()))
+        ) {
+          return reply
+            .code(400)
+            .send({ error: "Use a JPEG, PNG, or WebP Instagram cover" });
+        }
+
         const { title, description, platforms } = parsed.data;
         const overrides = parseOverrides(fields);
         const placements = parsePlacements(fields);
+        const tiktokOptions = platforms.includes("tiktok")
+          ? parseTikTokOptions(fields)
+          : undefined;
+        if (tiktokOptions) {
+          const tiktokError = validateTikTokOptions(tiktokOptions);
+          if (tiktokError) return reply.code(400).send({ error: tiktokError });
+        }
         const scheduledAt = parsed.data.scheduledAt;
         const launchDrop = parsed.data.launchDrop;
         if (platforms.length > entitlement.limits.channels) {
@@ -627,14 +739,26 @@ export default async function uploadRoutes(app: FastifyInstance) {
             code: "PLAN_FEATURE",
           });
         }
-        if (
-          Object.keys(placements).length > 0 &&
-          !entitlement.limits.placements
-        ) {
+        // Instagram placement is free on every plan (see
+        // UNGATED_PLACEMENT_PLATFORMS) — only the rest is a paid feature.
+        if (gatedPlacements(placements).length > 0 && !entitlement.limits.placements) {
           return reply.code(403).send({
-            error: "Custom placements require a Creator or Pro plan",
+            error: "Facebook placements require a Creator or Pro plan",
             code: "PLAN_FEATURE",
           });
+        }
+        if (cover) {
+          if (!entitlement.limits.instagramCover) {
+            return reply.code(403).send({
+              error: "Instagram covers require a Creator or Pro plan",
+              code: "PLAN_FEATURE",
+            });
+          }
+          if (kind !== "video" || !platforms.includes("instagram")) {
+            return reply.code(400).send({
+              error: "An Instagram cover only applies to a video posted to Instagram",
+            });
+          }
         }
         if (launchDrop && !entitlement.limits.launchDrops) {
           return reply.code(403).send({
@@ -693,16 +817,21 @@ export default async function uploadRoutes(app: FastifyInstance) {
           })),
           overrides,
           placements,
+          tiktokOptions,
           scheduledAt,
           launchDrop,
           pfmExternalId: hasOauthPlatform ? postId : undefined,
         });
         let mediaFiles: StoredMedia[];
         let thumbnailFile: StoredMedia | undefined;
+        let instagramCoverFile: StoredMedia | undefined;
         try {
           mediaFiles = await persistMedia(post.id, media);
           if (thumbnail) {
             thumbnailFile = await persistThumbnail(post.id, thumbnail);
+          }
+          if (cover) {
+            instagramCoverFile = await persistCover(post.id, cover);
           }
         } catch (error) {
           // No platform write has started yet, so removing this reservation is
@@ -711,10 +840,11 @@ export default async function uploadRoutes(app: FastifyInstance) {
           await Promise.all([
             fsp.rm(join(MEDIA_DIR, post.id), { recursive: true, force: true }),
             fsp.rm(join(THUMBNAIL_DIR, post.id), { recursive: true, force: true }),
+            fsp.rm(join(COVER_DIR, post.id), { recursive: true, force: true }),
           ]);
           throw error;
         }
-        postStore.update(post.id, { mediaFiles, thumbnailFile });
+        postStore.update(post.id, { mediaFiles, thumbnailFile, instagramCoverFile });
 
         try {
           const { results, pfmPostId } = await publish({
@@ -726,6 +856,8 @@ export default async function uploadRoutes(app: FastifyInstance) {
             kind,
             media: mediaFiles,
             placements,
+            instagramCover: instagramCoverFile,
+            tiktokOptions,
             scheduledAt,
             providerExternalId: hasOauthPlatform ? postId : undefined,
             onProviderAccepted: (pfmPostId, pfmAccountPlatforms) =>
@@ -877,6 +1009,8 @@ export default async function uploadRoutes(app: FastifyInstance) {
         platforms,
         overrides: post.overrides ?? {},
         placements: post.placements,
+        instagramCover: post.instagramCoverFile,
+        tiktokOptions: post.tiktokOptions,
         kind: post.kind,
         media: post.mediaFiles,
         providerExternalId,
@@ -930,9 +1064,13 @@ export default async function uploadRoutes(app: FastifyInstance) {
     const thumbnailDirectory = post.thumbnailFile
       ? dirname(post.thumbnailFile.path)
       : join(THUMBNAIL_DIR, post.id);
+    const coverDirectory = post.instagramCoverFile
+      ? dirname(post.instagramCoverFile.path)
+      : join(COVER_DIR, post.id);
     await Promise.all([
       fsp.rm(mediaDirectory, { recursive: true, force: true }),
       fsp.rm(thumbnailDirectory, { recursive: true, force: true }),
+      fsp.rm(coverDirectory, { recursive: true, force: true }),
     ]);
     return reply.code(204).send();
   });

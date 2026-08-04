@@ -69,14 +69,34 @@ export interface PfmSocialPost {
   external_id?: string | null;
 }
 
+// One media item on a post. `thumbnail_url` is how a custom cover is set —
+// Instagram Reel covers go through the Instagram config's `media` override
+// rather than a field of their own.
+export interface PfmPostMedia {
+  url: string;
+  thumbnail_url?: string;
+  thumbnail_timestamp_ms?: number;
+}
+
 // Per-platform overrides sent as `platform_configurations`. `caption` covers
 // our `<platform>_title` override; `title` is used by TikTok/YouTube;
-// `privacy_status` is required by TikTok.
+// `privacy_status` is required by TikTok; `media` overrides the post-level
+// media for one platform only (we use it to attach an Instagram cover).
 export interface PfmPlatformConfig {
   caption?: string;
   title?: string;
   privacy_status?: string;
   placement?: "timeline" | "reels" | "stories";
+  media?: PfmPostMedia[];
+  // TikTok-only. Interaction controls default to true provider-side; the
+  // disclosure flags are what TikTok's Direct Post rules require a creator to
+  // be able to set for themselves.
+  allow_comment?: boolean;
+  allow_duet?: boolean;
+  allow_stitch?: boolean;
+  disclose_your_brand?: boolean;
+  disclose_branded_content?: boolean;
+  is_ai_generated?: boolean;
 }
 
 export class PostForMeError extends Error {

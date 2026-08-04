@@ -12,7 +12,14 @@ export const tokenStorage = {
 };
 
 export class ApiError extends Error {
-  constructor(message: string, public readonly status: number) {
+  constructor(
+    message: string,
+    public readonly status: number,
+    // The server's machine-readable reason, when it sends one (PLAN_LIMIT,
+    // PLAN_FEATURE, RETRY_LIMIT...). Lets the UI offer a way out of the
+    // failure rather than only describing it.
+    public readonly code?: string
+  ) {
     super(message);
     this.name = "ApiError";
   }
@@ -75,7 +82,8 @@ export async function api<T>(
   if (!res.ok) {
     throw new ApiError(
       typeof json.error === "string" ? json.error : `Request failed (${res.status})`,
-      res.status
+      res.status,
+      typeof json.code === "string" ? json.code : undefined
     );
   }
   return json as T;
@@ -103,7 +111,8 @@ export async function apiUpload<T>(
   if (!res.ok) {
     throw new ApiError(
       typeof json.error === "string" ? json.error : `Upload failed (${res.status})`,
-      res.status
+      res.status,
+      typeof json.code === "string" ? json.code : undefined
     );
   }
   return json as T;

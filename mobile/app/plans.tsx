@@ -46,7 +46,8 @@ const FEATURES: Record<Exclude<PlanId, "free">, string[]> = {
     "3 connected channels",
     "100 posts each month",
     "50 scheduled posts",
-    "Per-platform captions and placements",
+    "Per-platform captions",
+    "Custom Instagram covers",
     "One year of post history",
   ],
   pro: [

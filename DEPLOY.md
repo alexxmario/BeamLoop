@@ -26,7 +26,7 @@ The backend is a Node/Fastify server in `server/`. It stores data in SQLite
    | `DATA_DIR` | `/app/data` (matches the volume mount) |
    | `MEDIA_RETENTION_HOURS` | `168` (retain retry media for seven days) |
    | `CONNECT_REDIRECT_URL` | `beamloop://connections/callback` |
-   | `TIKTOK_PRIVACY` | leave as `SELF_ONLY` until TikTok is enabled |
+   | `TIKTOK_PRIVACY` | `public` (the default; leave unset). Only set `private` if you move to a White Label Post for Me project whose own TikTok app hasn't passed the Direct Post audit. TikTok's own names (`PUBLIC_TO_EVERYONE`, `SELF_ONLY`) are still accepted and translated |
    | `CORS_ORIGIN` | optional comma-separated web origins; leave unset to disable browser CORS |
    | `PUBLIC_LEGAL_NAME` | exact person or company operating BeamLoop |
    | `SUPPORT_EMAIL` | monitored address shown to users and App Review |

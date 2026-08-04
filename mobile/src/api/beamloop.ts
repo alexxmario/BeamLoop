@@ -7,6 +7,7 @@ import type {
   SessionUser,
   UploadUsage,
   BillingStatus,
+  TikTokOptions,
 } from "./types";
 
 export async function fetchBillingStatus() {
@@ -89,6 +90,10 @@ export interface UploadOptions {
   // Per-platform caption overrides, forwarded as `<platform>_title`.
   overrides?: Partial<Record<Platform, string>>;
   placements?: Partial<Record<Platform, PostPlacement>>;
+  // Instagram cover for a video post (Creator/Pro). Video uploads only.
+  instagramCover?: PickedMedia;
+  // Only sent when TikTok is one of the destinations.
+  tiktok?: TikTokOptions;
   scheduledAt?: string;
   launchDrop?: boolean;
 }
@@ -99,6 +104,7 @@ function baseUploadForm({
   description,
   overrides,
   placements,
+  tiktok,
   scheduledAt,
   launchDrop,
 }: UploadOptions) {
@@ -111,6 +117,18 @@ function baseUploadForm({
   }
   for (const [platform, placement] of Object.entries(placements ?? {})) {
     if (placement) form.append(`${platform}_placement`, placement);
+  }
+  if (tiktok) {
+    form.append("tiktok_privacy", tiktok.privacy);
+    form.append("tiktok_allow_comment", String(tiktok.allowComment));
+    form.append("tiktok_allow_duet", String(tiktok.allowDuet));
+    form.append("tiktok_allow_stitch", String(tiktok.allowStitch));
+    form.append("tiktok_disclose_your_brand", String(tiktok.discloseYourBrand));
+    form.append(
+      "tiktok_disclose_branded_content",
+      String(tiktok.discloseBrandedContent)
+    );
+    form.append("tiktok_is_ai_generated", String(tiktok.isAiGenerated));
   }
   if (scheduledAt) form.append("scheduled_at", scheduledAt);
   if (launchDrop) form.append("launch_drop", "true");
@@ -127,6 +145,11 @@ export function uploadVideo(
   // React Native FormData takes { uri, name, type } for files.
   form.append("video", video as unknown as Blob);
   if (thumbnail) form.append("thumbnail", thumbnail as unknown as Blob);
+  // Whether the cover came from the frame scrubber or the photo library, it
+  // reaches the server as one image field.
+  if (options.instagramCover) {
+    form.append("instagram_cover", options.instagramCover as unknown as Blob);
+  }
   return apiUpload<UploadResult>("/uploads/video", form, { "Idempotency-Key": idempotencyKey });
 }
 

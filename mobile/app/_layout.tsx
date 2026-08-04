@@ -15,6 +15,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { View } from "react-native";
 import { AuthProvider, useAuth } from "../src/auth/AuthContext";
+import { NoticeProvider } from "../src/components/Notice";
 import { palette } from "../src/theme";
 
 // Hold the native splash until the display fonts are ready. Without this the
@@ -95,36 +96,38 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <AuthGate />
-      <StatusBar style="light" />
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: palette.console },
-          headerTintColor: palette.text,
-          contentStyle: { backgroundColor: palette.console },
-        }}
-      >
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="library" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="plans"
-          options={{ headerShown: false, presentation: "modal" }}
-        />
-        <Stack.Screen
-          name="account"
-          options={{ headerShown: false, presentation: "modal" }}
-        />
-        <Stack.Screen
-          name="compose"
-          options={{ headerShown: false, presentation: "fullScreenModal" }}
-        />
-        <Stack.Screen
-          name="connections/callback"
-          options={{ headerShown: false }}
-        />
-      </Stack>
+      <NoticeProvider>
+        <AuthGate />
+        <StatusBar style="light" />
+        <Stack
+          screenOptions={{
+            headerStyle: { backgroundColor: palette.console },
+            headerTintColor: palette.text,
+            contentStyle: { backgroundColor: palette.console },
+          }}
+        >
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="library" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="plans"
+            options={{ headerShown: false, presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="account"
+            options={{ headerShown: false, presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="compose"
+            options={{ headerShown: false, presentation: "fullScreenModal" }}
+          />
+          <Stack.Screen
+            name="connections/callback"
+            options={{ headerShown: false }}
+          />
+        </Stack>
+      </NoticeProvider>
     </AuthProvider>
   );
 }

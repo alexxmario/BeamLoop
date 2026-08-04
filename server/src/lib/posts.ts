@@ -21,6 +21,25 @@ export interface StoredMedia {
   mimetype: string;
 }
 
+/**
+ * What the composer lets a creator decide about a TikTok post.
+ *
+ * TikTok's Direct Post rules require the creator — not the app — to choose who
+ * sees a post and to declare commercial content, so these travel with the post
+ * rather than coming from server configuration.
+ */
+export interface TikTokOptions {
+  privacy: "public" | "private";
+  allowComment: boolean;
+  allowDuet: boolean;
+  allowStitch: boolean;
+  // "Your brand" = promoting yourself; "branded content" = a paid partnership.
+  // TikTok treats the second as advertising, which is why it can't be private.
+  discloseYourBrand: boolean;
+  discloseBrandedContent: boolean;
+  isAiGenerated: boolean;
+}
+
 export interface PostRecord {
   id: string;
   userId: string;
@@ -45,6 +64,12 @@ export interface PostRecord {
   overrides?: Record<string, string>;
   // Instagram/Facebook destination selected in the composer.
   placements?: Record<string, "timeline" | "reels" | "stories">;
+  // Instagram cover image for a video post (Creator/Pro). Kept on disk so a
+  // retry re-sends the same cover the user chose.
+  instagramCoverFile?: StoredMedia;
+  // TikTok posting options chosen in the composer. Stored so a retry re-sends
+  // the same privacy and disclosure the user agreed to, never a fresh default.
+  tiktokOptions?: TikTokOptions;
   facebookPageId?: string;
   // The Post for Me post id, so we can refresh async results later.
   pfmPostId?: string;

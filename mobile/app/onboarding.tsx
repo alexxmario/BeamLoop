@@ -1,7 +1,6 @@
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform as RNPlatform,
   Pressable,
@@ -15,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
 import { requestPasswordReset } from "../src/api/beamloop";
 import { useAuth } from "../src/auth/AuthContext";
+import { useNotice } from "../src/components/Notice";
 import { BeamBurst } from "../src/components/BeamBurst";
 import { platformGlyphPath } from "../src/components/platformGlyphs";
 import {
@@ -52,8 +52,8 @@ export default function Onboarding() {
   const [mode, setMode] = useState<"signup" | "login">("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const notice = useNotice();
 
   const goTo = (index: number) => {
     scrollRef.current?.scrollTo({ x: index * width, animated: true });
@@ -61,14 +61,13 @@ export default function Onboarding() {
   };
 
   const submit = async () => {
-    setError(null);
     setBusy(true);
     try {
       if (mode === "signup") await signUp(email.trim(), password);
       else await signIn(email.trim(), password);
       router.replace("/(tabs)/connections");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      notice(e instanceof Error ? e.message : "Something went wrong");
     } finally {
       setBusy(false);
     }
@@ -79,19 +78,21 @@ export default function Onboarding() {
   const forgotPassword = async () => {
     const address = email.trim();
     if (!address) {
-      setError("Enter your email address first, then tap this again.");
+      notice("Enter your email address first, then tap this again.", {
+        title: "No email yet",
+        tone: "info",
+      });
       return;
     }
-    setError(null);
     setBusy(true);
     try {
       await requestPasswordReset(address);
-      Alert.alert(
-        "Check your email",
-        `If ${address} has a BeamLoop account, a reset link is on its way. It expires in an hour.`
+      notice(
+        `If ${address} has a BeamLoop account, a reset link is on its way. It expires in an hour.`,
+        { title: "Check your email", tone: "info" }
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't start a password reset");
+      notice(e instanceof Error ? e.message : "Couldn't start a password reset");
     } finally {
       setBusy(false);
     }
@@ -292,11 +293,6 @@ export default function Onboarding() {
               value={password}
               onChangeText={setPassword}
             />
-            {error && (
-              <Text style={[s.errorText, { marginBottom: spacing.md }]}>
-                {error}
-              </Text>
-            )}
             <Pressable
               style={[s.buttonPrimary, busy && s.buttonDisabled]}
               disabled={busy}

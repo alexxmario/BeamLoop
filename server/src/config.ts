@@ -9,17 +9,34 @@ const envSchema = z.object({
   // Secret returned when the production Post for Me webhook is created.
   // Webhook requests are rejected unless this is configured.
   POSTFORME_WEBHOOK_SECRET: z.string().min(16).optional(),
-  // TikTok requires a privacy level on every post. Unaudited TikTok apps may
-  // ONLY post SELF_ONLY (private); flip to PUBLIC_TO_EVERYONE once your TikTok
-  // app passes the Direct Post audit.
-  TIKTOK_PRIVACY: z
-    .enum([
-      "SELF_ONLY",
-      "PUBLIC_TO_EVERYONE",
-      "MUTUAL_FOLLOW_FRIENDS",
-      "FOLLOWER_OF_CREATOR",
-    ])
-    .default("SELF_ONLY"),
+  // Privacy level sent with every TikTok post. Post for Me takes its own
+  // "public"/"private" values here, NOT TikTok's raw PUBLIC_TO_EVERYONE /
+  // SELF_ONLY enum (verified against their OpenAPI spec), so TikTok's names are
+  // accepted and translated rather than rejected — a deployment still carrying
+  // TIKTOK_PRIVACY=SELF_ONLY must not fail to boot. Anything short of fully
+  // public maps to "private", which is the safe direction to round in.
+  //
+  // Public works because we publish through Post for Me's own TikTok client on
+  // the Quickstart plan. On a White Label project with your own TikTok app,
+  // set this to private until that app passes TikTok's Direct Post audit — an
+  // unaudited client may only post privately and TikTok rejects anything else.
+  TIKTOK_PRIVACY: z.preprocess(
+    (value) => {
+      if (value === undefined || value === null || value === "") return undefined;
+      const raw = String(value).trim().toUpperCase();
+      if (raw === "PUBLIC" || raw === "PUBLIC_TO_EVERYONE") return "public";
+      if (
+        raw === "PRIVATE" ||
+        raw === "SELF_ONLY" ||
+        raw === "MUTUAL_FOLLOW_FRIENDS" ||
+        raw === "FOLLOWER_OF_CREATOR"
+      ) {
+        return "private";
+      }
+      return String(value);
+    },
+    z.enum(["public", "private"]).default("public")
+  ),
   // The deep link the platform login returns to. Must ALSO be set as the
   // Project Redirect URL in the Post for Me dashboard (the free plan doesn't
   // allow a per-request override).

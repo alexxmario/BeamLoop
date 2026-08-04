@@ -10,3 +10,6 @@ export const MEDIA_DIR = join(DATA_DIR, "media");
 // Small previews outlive full retry media so History stays visual without
 // retaining a user's original upload indefinitely.
 export const THUMBNAIL_DIR = join(DATA_DIR, "thumbnails");
+// Instagram cover images. Kept with the retry media rather than the previews:
+// a cover is only meaningful while the post can still be re-sent.
+export const COVER_DIR = join(DATA_DIR, "covers");

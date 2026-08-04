@@ -53,6 +53,33 @@ export interface PostRecord {
 
 export type PostPlacement = "timeline" | "reels" | "stories";
 
+/**
+ * What a creator decides about a TikTok post. TikTok's Direct Post rules put
+ * these choices with the person posting rather than with the app, so they are
+ * part of the composer and travel with each post.
+ */
+export interface TikTokOptions {
+  privacy: "public" | "private";
+  allowComment: boolean;
+  allowDuet: boolean;
+  allowStitch: boolean;
+  discloseYourBrand: boolean;
+  discloseBrandedContent: boolean;
+  isAiGenerated: boolean;
+}
+
+// TikTok's own defaults: visible to everyone, every interaction allowed,
+// nothing declared as commercial.
+export const DEFAULT_TIKTOK_OPTIONS: TikTokOptions = {
+  privacy: "public",
+  allowComment: true,
+  allowDuet: true,
+  allowStitch: true,
+  discloseYourBrand: false,
+  discloseBrandedContent: false,
+  isAiGenerated: false,
+};
+
 export interface UploadUsage {
   count: number;
   limit: number;
@@ -75,7 +102,10 @@ export interface BillingStatus {
       ideas: number | null;
       historyDays: number | null;
       platformCaptions: boolean;
+      // Facebook placement. Instagram's Post/Reel/Story choice is free on every
+      // plan — it is how Instagram works, not an upgrade.
       placements: boolean;
+      instagramCover: boolean;
       launchDrops: boolean;
     };
   };
@@ -96,11 +126,12 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   linkedin: "LinkedIn",
 };
 
-// Platforms not yet enabled at launch. TikTok is pending its Content Posting
-// audit; LinkedIn is blocked upstream — the provider's shared LinkedIn OAuth app
-// isn't authorized for the `openid` scope, so LinkedIn rejects the grant before
-// consent and no auth code is ever issued. Shown with a "Soon" badge, not
-// connectable or selectable. Remove a platform from this set to make it live.
-export const COMING_SOON = new Set<Platform>(["tiktok", "threads", "linkedin"]);
+// Platforms not yet enabled. LinkedIn is blocked upstream — the provider's
+// shared LinkedIn OAuth app isn't authorized for the `openid` scope, so
+// LinkedIn rejects the grant before consent and no auth code is ever issued.
+// Shown with a "Soon" badge, not connectable or selectable. Remove a platform
+// from this set to make it live (mirror the change in the server's
+// COMING_SOON_PLATFORMS).
+export const COMING_SOON = new Set<Platform>(["threads", "linkedin"]);
 
 export const isComingSoon = (platform: Platform) => COMING_SOON.has(platform);

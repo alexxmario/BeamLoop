@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { userStore, verifyPassword } from "../lib/store.js";
 import { postStore } from "../lib/posts.js";
-import { MEDIA_DIR, THUMBNAIL_DIR } from "../lib/paths.js";
+import { COVER_DIR, MEDIA_DIR, THUMBNAIL_DIR } from "../lib/paths.js";
 import { signSessionToken } from "../plugins/auth.js";
 import { postForMe } from "../lib/postForMe.js";
 import { subscriptionStore } from "../lib/plans.js";
@@ -156,7 +156,10 @@ export default async function authRoutes(app: FastifyInstance) {
         const thumbnailDir = post.thumbnailFile
           ? dirname(post.thumbnailFile.path)
           : join(THUMBNAIL_DIR, post.id);
-        for (const dir of [mediaDir, thumbnailDir]) {
+        const coverDir = post.instagramCoverFile
+          ? dirname(post.instagramCoverFile.path)
+          : join(COVER_DIR, post.id);
+        for (const dir of [mediaDir, thumbnailDir, coverDir]) {
           try {
             rmSync(dir, { recursive: true, force: true });
           } catch (err) {

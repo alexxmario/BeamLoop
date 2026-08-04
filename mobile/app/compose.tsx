@@ -32,20 +32,26 @@ import Svg, {
   Stop,
 } from "react-native-svg";
 import {
+  fetchBillingStatus,
   fetchConnections,
   fetchPostStatus,
   uploadPhotos,
   uploadVideo,
   type PickedMedia,
 } from "../src/api/beamloop";
+import { ApiError } from "../src/api/client";
 import {
+  DEFAULT_TIKTOK_OPTIONS,
   PLATFORM_LABELS,
   isComingSoon,
+  type BillingStatus,
   type Connection,
   type Platform,
   type PostPlacement,
   type PostRecord,
+  type TikTokOptions,
 } from "../src/api/types";
+import { useNotice } from "../src/components/Notice";
 import { PlatformGlyph } from "../src/components/PlatformGlyph";
 import { Stripes } from "../src/components/Stripes";
 import { useReducedMotion } from "../src/hooks/useReducedMotion";
@@ -148,6 +154,7 @@ function buildPreflightChecks(input: {
   caption: string;
   overrides: Partial<Record<Platform, string>>;
   placements: Partial<Record<Platform, PostPlacement>>;
+  tiktok: TikTokOptions;
   scheduledAt: string | null;
   launchDrop: boolean;
 }): PreflightCheck[] {
@@ -158,6 +165,7 @@ function buildPreflightChecks(input: {
     caption,
     overrides,
     placements,
+    tiktok,
     scheduledAt,
     launchDrop,
   } = input;
@@ -241,6 +249,20 @@ function buildPreflightChecks(input: {
         level: verticalWarning ? "warn" : "pass",
       });
     }
+  }
+
+  if (selected.includes("tiktok")) {
+    // A private TikTok post is a legitimate choice but a surprising outcome,
+    // so it is called out rather than left to be discovered on the app.
+    checks.push(
+      tiktok.privacy === "private"
+        ? {
+            label: "TikTok",
+            detail: "Only you will see this post",
+            level: "warn",
+          }
+        : { label: "TikTok", detail: "Public to everyone", level: "pass" }
+    );
   }
 
   if (scheduledAt) {
@@ -347,7 +369,15 @@ export default function ComposeModal() {
   const [channelGroups, setChannelGroups] = useState<ChannelGroup[]>([]);
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [step, setStep] = useState<Step>({ name: "edit" });
-  const [error, setError] = useState<string | null>(null);
+  // The Instagram cover, once chosen — a frame lifted from the video or an
+  // image from the library. Cleared whenever the video it belonged to changes.
+  const [instagramCover, setInstagramCover] = useState<PickedMedia | null>(null);
+  const [coverFrameOpen, setCoverFrameOpen] = useState(false);
+  const [tiktok, setTiktok] = useState<TikTokOptions>(DEFAULT_TIKTOK_OPTIONS);
+  const [limits, setLimits] = useState<BillingStatus["entitlement"]["limits"] | null>(
+    null
+  );
+  const notice = useNotice();
   // Keep this key if the network drops so a manual retry cannot publish twice.
   const [idempotencyKey, setIdempotencyKey] = useState(createIdempotencyKey);
   const checkingLater = useRef(false);
@@ -429,13 +459,17 @@ export default function ComposeModal() {
     const missing = platforms.filter((platform) => !live.has(platform));
     setSelected(new Set(available));
     setIdempotencyKey(createIdempotencyKey());
-    setError(
-      available.length === 0
-        ? "None of the channels in that group are connected yet."
-        : missing.length
-          ? `${missing.map((platform) => PLATFORM_LABELS[platform]).join(", ")} was skipped because it isn't connected.`
-          : null
-    );
+    if (available.length === 0) {
+      notice("None of the channels in that group are connected yet.", {
+        title: "Nothing to select",
+        tone: "info",
+      });
+    } else if (missing.length) {
+      notice(
+        `${missing.map((platform) => PLATFORM_LABELS[platform]).join(", ")} was skipped because it isn't connected.`,
+        { title: "Some channels skipped", tone: "info" }
+      );
+    }
   };
 
   useEffect(() => {
@@ -454,16 +488,18 @@ export default function ComposeModal() {
 
   const saveCurrentIdea = () => {
     if (!user || !caption.trim()) {
-      setError("Write a caption before saving it as an idea.");
+      notice("Write a caption before saving it as an idea.", {
+        title: "Nothing to save",
+        tone: "info",
+      });
       return;
     }
     try {
       saveIdea(user.id, caption);
       refreshIdeas();
-      setError(null);
       setIdeasOpen(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't save that idea");
+      notice(e instanceof Error ? e.message : "Couldn't save that idea");
     }
   };
 
@@ -484,13 +520,18 @@ export default function ComposeModal() {
         })
         .catch((e) => {
           setConnections([]);
-          setError(e instanceof Error ? e.message : "Couldn't load your connections");
+          notice(e instanceof Error ? e.message : "Couldn't load your connections");
         });
-    }, [])
+      // The plan decides whether the Instagram cover picker is offered. A
+      // failure here is silent: the composer stays usable and the server is
+      // the authority on the limit anyway.
+      fetchBillingStatus()
+        .then((status) => setLimits(status.entitlement.limits))
+        .catch(() => {});
+    }, [notice])
   );
 
   const pick = async (kind: Media["kind"]) => {
-    setError(null);
     let result: ImagePicker.ImagePickerResult;
     try {
       result = await ImagePicker.launchImageLibraryAsync({
@@ -500,17 +541,19 @@ export default function ComposeModal() {
         quality: 0.9,
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't open your media library");
+      notice(e instanceof Error ? e.message : "Couldn't open your media library");
       return;
     }
     if (result.canceled || result.assets.length === 0) return;
     if (kind === "video") {
       const video = result.assets[0];
       if (video?.fileSize && video.fileSize > MAX_VIDEO_BYTES) {
-        setError("Choose a video smaller than 500 MB.");
+        notice("Choose a video smaller than 500 MB.");
         return;
       }
       setIdempotencyKey(createIdempotencyKey());
+      // A cover belongs to the video it was lifted from.
+      setInstagramCover(null);
       setMedia({ kind, items: result.assets.map(assetToMedia) });
       return;
     }
@@ -520,9 +563,35 @@ export default function ComposeModal() {
       setPlacements((prev) =>
         prev.instagram === "reels" ? { ...prev, instagram: "timeline" } : prev
       );
+      // Covers are a video-only concept.
+      setInstagramCover(null);
       setMedia({ kind, items });
     } catch {
-      setError("Couldn't process that photo. Try a different one.");
+      notice("Couldn't process that photo. Try a different one.");
+    }
+  };
+
+  // Instagram cover, chosen from the photo library rather than the video.
+  const pickCoverImage = async () => {
+    let result: ImagePicker.ImagePickerResult;
+    try {
+      result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsMultipleSelection: false,
+        quality: 0.9,
+      });
+    } catch (e) {
+      notice(e instanceof Error ? e.message : "Couldn't open your media library");
+      return;
+    }
+    const asset = result.canceled ? undefined : result.assets[0];
+    if (!asset) return;
+    try {
+      // iPhone photos are HEIC; Instagram needs a decodable JPEG.
+      setInstagramCover(await assetToJpegMedia(asset));
+      setIdempotencyKey(createIdempotencyKey());
+    } catch {
+      notice("Couldn't process that image. Try a different one.");
     }
   };
 
@@ -540,7 +609,6 @@ export default function ComposeModal() {
     if (!media) return;
     checkingLater.current = false;
     setStep({ name: "transmitting" });
-    setError(null);
     const started = Date.now();
     try {
       const thumbnail = await makeHistoryThumbnail(media);
@@ -549,6 +617,13 @@ export default function ComposeModal() {
         platforms: [...selected],
         overrides,
         placements,
+        // Only send a cover when it can actually apply, so a leftover choice
+        // can never turn a photo post into a 400.
+        instagramCover:
+          media.kind === "video" && selected.has("instagram") && instagramCover
+            ? instagramCover
+            : undefined,
+        tiktok: selected.has("tiktok") ? tiktok : undefined,
         scheduledAt: scheduledAt ?? undefined,
         launchDrop,
       };
@@ -565,7 +640,20 @@ export default function ComposeModal() {
       }
     } catch (e) {
       if (!checkingLater.current) {
-        setError(e instanceof Error ? e.message : "Upload failed");
+        const planIssue =
+          e instanceof ApiError &&
+          (e.code === "PLAN_LIMIT" || e.code === "PLAN_FEATURE");
+        notice(e instanceof Error ? e.message : "Upload failed", {
+          ...(planIssue
+            ? {
+                title: "Your plan doesn't cover this",
+                action: {
+                  label: "See plans",
+                  onPress: () => router.push("/plans"),
+                },
+              }
+            : {}),
+        });
         setStep({ name: "edit" });
       }
     }
@@ -580,15 +668,12 @@ export default function ComposeModal() {
     setScheduledAt(null);
     setLaunchDrop(false);
     setOverrideEditor(null);
-    setError(null);
+    setInstagramCover(null);
+    setTiktok(DEFAULT_TIKTOK_OPTIONS);
     setStep({ name: "edit" });
   };
 
   const selectedList = [...selected];
-  const tooLongPlatforms = selectedList.filter((platform) => {
-    const limit = PLATFORM_CAPTION_LIMITS[platform];
-    return Boolean(limit && (overrides[platform]?.trim() || caption.trim()).length > limit);
-  });
   const preflightChecks = buildPreflightChecks({
     connections,
     selected: selectedList,
@@ -596,6 +681,7 @@ export default function ComposeModal() {
     caption,
     overrides,
     placements,
+    tiktok,
     scheduledAt,
     launchDrop,
   });
@@ -804,6 +890,31 @@ export default function ComposeModal() {
           />
         )}
 
+        {selected.has("tiktok") && (
+          <TikTokOptionsCard
+            value={tiktok}
+            mediaKind={media?.kind ?? null}
+            onChange={(next) => {
+              setTiktok(next);
+              setIdempotencyKey(createIdempotencyKey());
+            }}
+          />
+        )}
+
+        {selected.has("instagram") && media?.kind === "video" && (
+          <InstagramCoverCard
+            locked={limits ? !limits.instagramCover : false}
+            cover={instagramCover}
+            onPickFrame={() => setCoverFrameOpen(true)}
+            onPickImage={pickCoverImage}
+            onClear={() => {
+              setInstagramCover(null);
+              setIdempotencyKey(createIdempotencyKey());
+            }}
+            onUpgrade={() => router.push("/plans")}
+          />
+        )}
+
         <ScheduleCard
           value={scheduledAt}
           onChange={(value) => {
@@ -827,22 +938,13 @@ export default function ComposeModal() {
 
         <PreflightCard checks={preflightChecks} />
 
-        {error && <Text style={s.errorText}>{error}</Text>}
-        {connections.length === 0 && !error && (
+        {connections.length === 0 && (
           <Pressable
             onPress={() => router.replace("/(tabs)/connections")}
             style={[s.buttonSecondary, { alignItems: "center" }]}
           >
             <Text style={s.buttonSecondaryText}>Connect an account to start posting</Text>
           </Pressable>
-        )}
-        {tooLongPlatforms.length > 0 && (
-          <Text style={s.errorText}>
-            {PLATFORM_LABELS[tooLongPlatforms[0]!]} needs a caption of{
-              " "
-            }{PLATFORM_CAPTION_LIMITS[tooLongPlatforms[0]!]!} characters or fewer. Add a
-            platform-specific caption above.
-          </Text>
         )}
       </ScrollView>
 
@@ -938,15 +1040,28 @@ export default function ComposeModal() {
           try {
             saveChannelGroup(user.id, name, selectedList);
             refreshChannelGroups();
-            setError(null);
           } catch (e) {
-            setError(e instanceof Error ? e.message : "Couldn't save that group");
+            notice(e instanceof Error ? e.message : "Couldn't save that group");
           }
         }}
         onDelete={(group) => {
           if (!user) return;
           deleteChannelGroup(user.id, group.id);
           refreshChannelGroups();
+        }}
+      />
+      <CoverFrameSheet
+        visible={coverFrameOpen}
+        video={media?.kind === "video" ? media.items[0] ?? null : null}
+        onClose={() => setCoverFrameOpen(false)}
+        onChoose={(frame) => {
+          setInstagramCover(frame);
+          setIdempotencyKey(createIdempotencyKey());
+          setCoverFrameOpen(false);
+        }}
+        onFail={(message) => {
+          setCoverFrameOpen(false);
+          notice(message);
         }}
       />
     </View>
@@ -1564,6 +1679,639 @@ function InstagramDestinationCard({
         </Text>
       )}
     </View>
+  );
+}
+
+/** A labelled on/off row, styled as a pill rather than a platform Switch. */
+function OptionToggle({
+  label,
+  detail,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  detail?: string;
+  value: boolean;
+  disabled?: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value, disabled: Boolean(disabled) }}
+      disabled={disabled}
+      onPress={() => onChange(!value)}
+      style={[
+        s.row,
+        { justifyContent: "space-between", opacity: disabled ? 0.4 : 1 },
+      ]}
+    >
+      <View style={{ flex: 1, paddingRight: spacing.md }}>
+        <Text style={{ ...type.bodySm, color: palette.text }}>{label}</Text>
+        {detail && (
+          <Text style={{ ...type.monoMeta, color: palette.textLabel, marginTop: 2 }}>
+            {detail}
+          </Text>
+        )}
+      </View>
+      <View
+        style={{
+          minWidth: 54,
+          paddingVertical: 6,
+          paddingHorizontal: spacing.md,
+          borderRadius: radius.chip,
+          alignItems: "center",
+          backgroundColor: value ? platformHue.tiktok : palette.sheet,
+          borderWidth: 1,
+          borderColor: value ? platformHue.tiktok : palette.borderStrong,
+        }}
+      >
+        <Text
+          style={{
+            ...type.monoMeta,
+            color: value ? palette.console : palette.textLabel,
+            letterSpacing: tracking(monoTracking.status, type.monoMeta.fontSize),
+          }}
+        >
+          {value ? "ON" : "OFF"}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * TikTok's posting choices.
+ *
+ * TikTok requires the creator, not the app, to decide who sees a post and to
+ * declare commercial content — so these live in the composer instead of in
+ * server configuration, and they are free on every plan for the same reason
+ * Instagram's placement is: they are part of posting, not an upgrade.
+ */
+function TikTokOptionsCard({
+  value,
+  mediaKind,
+  onChange,
+}: {
+  value: TikTokOptions;
+  mediaKind: Media["kind"] | null;
+  onChange: (value: TikTokOptions) => void;
+}) {
+  const set = (patch: Partial<TikTokOptions>) => onChange({ ...value, ...patch });
+  const disclosing = value.discloseYourBrand || value.discloseBrandedContent;
+
+  return (
+    <View
+      style={{
+        backgroundColor: palette.strip,
+        borderWidth: 1,
+        borderColor: platformHue.tiktok,
+        borderRadius: radius.card,
+        padding: spacing.cardPad,
+        gap: spacing.lg,
+      }}
+    >
+      <View style={[s.row, { gap: spacing.sm }]}>
+        <View
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: radius.badge,
+            backgroundColor: platformHue.tiktok,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <PlatformGlyph platform="tiktok" size={16} color={palette.console} />
+        </View>
+        <View>
+          <Text style={s.sectionLabel}>TikTok</Text>
+          <Text style={{ ...type.itemTitleSm, color: palette.text, marginTop: 2 }}>
+            Who sees it, and what they can do.
+          </Text>
+        </View>
+      </View>
+
+      <View style={{ gap: spacing.sm }}>
+        <Text style={s.sectionLabel}>Who can see this</Text>
+        <View style={[s.row, { gap: spacing.sm }]}>
+          {(
+            [
+              { value: "public" as const, label: "Everyone", detail: "Public" },
+              { value: "private" as const, label: "Only me", detail: "Private" },
+            ]
+          ).map((option) => {
+            // TikTok treats a paid partnership as advertising, and advertising
+            // can't be hidden, so private is unavailable while it's declared.
+            const blocked =
+              option.value === "private" && value.discloseBrandedContent;
+            const active = value.privacy === option.value;
+            return (
+              <Pressable
+                key={option.value}
+                disabled={blocked}
+                onPress={() => set({ privacy: option.value })}
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  alignItems: "center",
+                  borderRadius: radius.tile,
+                  backgroundColor: active ? platformHue.tiktok : palette.sheet,
+                  borderWidth: 1,
+                  borderColor: active ? platformHue.tiktok : palette.borderStrong,
+                  opacity: blocked ? 0.38 : 1,
+                }}
+              >
+                <Text
+                  style={{
+                    ...type.buttonSm,
+                    color: active ? palette.console : palette.text,
+                  }}
+                >
+                  {option.label}
+                </Text>
+                <Text
+                  style={{
+                    ...type.monoMeta,
+                    color: active ? palette.console : palette.textLabel,
+                    marginTop: 2,
+                  }}
+                >
+                  {option.detail}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {value.discloseBrandedContent && (
+          <Text style={{ ...type.monoMeta, color: palette.textLabel }}>
+            Paid partnerships have to be public on TikTok.
+          </Text>
+        )}
+      </View>
+
+      <View style={{ gap: spacing.md }}>
+        <Text style={s.sectionLabel}>Let viewers</Text>
+        <OptionToggle
+          label="Comment"
+          value={value.allowComment}
+          onChange={(next) => set({ allowComment: next })}
+        />
+        {mediaKind === "video" && (
+          <>
+            <OptionToggle
+              label="Duet"
+              value={value.allowDuet}
+              onChange={(next) => set({ allowDuet: next })}
+            />
+            <OptionToggle
+              label="Stitch"
+              value={value.allowStitch}
+              onChange={(next) => set({ allowStitch: next })}
+            />
+          </>
+        )}
+      </View>
+
+      <View style={{ gap: spacing.md }}>
+        <Text style={s.sectionLabel}>Disclosure</Text>
+        <OptionToggle
+          label="Promotes your own brand"
+          detail="Your business, product, or service"
+          value={value.discloseYourBrand}
+          onChange={(next) => set({ discloseYourBrand: next })}
+        />
+        <OptionToggle
+          label="Paid partnership"
+          detail="Someone else paid for this post"
+          value={value.discloseBrandedContent}
+          onChange={(next) =>
+            set({
+              discloseBrandedContent: next,
+              // Turning this on forces the post public rather than failing at
+              // TikTok with an error the creator can't act on.
+              ...(next && value.privacy === "private"
+                ? { privacy: "public" as const }
+                : {}),
+            })
+          }
+        />
+        <OptionToggle
+          label="Made with AI"
+          detail="Generated or substantially edited by AI"
+          value={value.isAiGenerated}
+          onChange={(next) => set({ isAiGenerated: next })}
+        />
+      </View>
+
+      {disclosing && (
+        <Text style={{ ...type.monoMeta, color: palette.textLabel }}>
+          {value.discloseBrandedContent
+            ? "By posting, you agree to TikTok's Branded Content Policy and Music Usage Confirmation."
+            : "By posting, you agree to TikTok's Music Usage Confirmation."}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+/**
+ * The Instagram cover — the still that represents a video in the grid and in
+ * Reels. Instagram lets you pick one when posting natively; without it a
+ * cross-posted video gets whatever frame Meta lands on.
+ *
+ * A paid feature, so free accounts see what it does and where to get it rather
+ * than a control that fails when used.
+ */
+function InstagramCoverCard({
+  locked,
+  cover,
+  onPickFrame,
+  onPickImage,
+  onClear,
+  onUpgrade,
+}: {
+  locked: boolean;
+  cover: PickedMedia | null;
+  onPickFrame: () => void;
+  onPickImage: () => void;
+  onClear: () => void;
+  onUpgrade: () => void;
+}) {
+  return (
+    <View
+      style={{
+        backgroundColor: palette.strip,
+        borderWidth: 1,
+        borderColor: palette.border,
+        borderRadius: radius.card,
+        padding: spacing.cardPad,
+        gap: spacing.md,
+      }}
+    >
+      <View style={[s.row, { justifyContent: "space-between" }]}>
+        <View style={{ flex: 1, paddingRight: spacing.sm }}>
+          <Text style={s.sectionLabel}>Instagram cover</Text>
+          <Text
+            style={{ ...type.itemTitleSm, color: palette.text, marginTop: 2 }}
+          >
+            {locked
+              ? "Choose the frame people see first."
+              : cover
+                ? "This still represents your video."
+                : "Instagram picks a frame unless you do."}
+          </Text>
+        </View>
+        {locked && (
+          <View
+            style={{
+              paddingHorizontal: spacing.sm,
+              paddingVertical: 4,
+              borderRadius: radius.slot,
+              backgroundColor: palette.sheet,
+              borderWidth: 1,
+              borderColor: palette.borderHair,
+            }}
+          >
+            <Text
+              style={{
+                ...type.monoMicro,
+                color: palette.textSecondary,
+                letterSpacing: tracking(
+                  monoTracking.status,
+                  type.monoMicro.fontSize
+                ),
+              }}
+            >
+              CREATOR
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {locked ? (
+        <Pressable
+          onPress={onUpgrade}
+          style={[s.buttonSecondary, { height: sizes.btnSm }]}
+        >
+          <Text style={s.buttonSecondaryText}>See plans</Text>
+        </Pressable>
+      ) : cover ? (
+        <View style={[s.row, { gap: spacing.md }]}>
+          <Image
+            source={{ uri: cover.uri }}
+            style={{
+              width: 54,
+              height: 96,
+              borderRadius: radius.input,
+              backgroundColor: palette.canvas,
+            }}
+            resizeMode="cover"
+          />
+          <View style={{ flex: 1, gap: spacing.sm }}>
+            <Pressable
+              onPress={onPickFrame}
+              style={[s.buttonSecondary, { height: sizes.btnSm }]}
+            >
+              <Text style={s.buttonSecondaryText}>Change frame</Text>
+            </Pressable>
+            <Pressable onPress={onClear} hitSlop={8} style={{ alignSelf: "center" }}>
+              <Text style={{ ...type.monoMeta, color: palette.textLabel }}>
+                REMOVE COVER
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <View style={[s.row, { gap: spacing.sm }]}>
+          <Pressable
+            onPress={onPickFrame}
+            style={[s.buttonSecondary, { flex: 1, height: sizes.btnSm }]}
+          >
+            <Text style={s.buttonSecondaryText}>Pick a frame</Text>
+          </Pressable>
+          <Pressable
+            onPress={onPickImage}
+            style={[s.buttonSecondary, { flex: 1, height: sizes.btnSm }]}
+          >
+            <Text style={s.buttonSecondaryText}>Upload image</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// How many stills the scrub strip is built from. Enough to recognise a moment
+// at a glance without making the sheet wait on a dozen decodes.
+const COVER_STRIP_FRAMES = 7;
+// Instagram wants a cover at least 720px wide; more is discarded on upload.
+const COVER_WIDTH = 1080;
+
+async function frameAt(uri: string, timeMs: number): Promise<PickedMedia> {
+  const frame = await VideoThumbnails.getThumbnailAsync(uri, {
+    time: Math.max(timeMs, 0),
+    quality: 0.9,
+  });
+  const out = await manipulateAsync(
+    frame.uri,
+    [{ resize: { width: Math.min(frame.width || COVER_WIDTH, COVER_WIDTH) } }],
+    { compress: 0.9, format: SaveFormat.JPEG }
+  );
+  return {
+    uri: out.uri,
+    name: "instagram-cover.jpg",
+    type: "image/jpeg",
+    width: out.width,
+    height: out.height,
+  };
+}
+
+/**
+ * Scrub the video for a cover frame. The strip underneath is a coarse map of
+ * the whole clip; dragging across it previews the nearest still instantly, and
+ * the exact frame is decoded when the finger lifts — decoding on every pixel of
+ * movement would stutter for no visible gain.
+ */
+function CoverFrameSheet({
+  visible,
+  video,
+  onClose,
+  onChoose,
+  onFail,
+}: {
+  visible: boolean;
+  video: PickedMedia | null;
+  onClose: () => void;
+  onChoose: (frame: PickedMedia) => void;
+  onFail: (message: string) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const [strip, setStrip] = useState<string[]>([]);
+  const [position, setPosition] = useState(0);
+  const [preview, setPreview] = useState<PickedMedia | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [trackWidth, setTrackWidth] = useState(0);
+
+  const uri = video?.uri ?? null;
+  const durationMs = video?.durationMs ?? 0;
+
+  // Held in a ref so the caller's inline handler doesn't re-trigger the strip
+  // build on every render of the composer.
+  const onFailRef = useRef(onFail);
+  onFailRef.current = onFail;
+
+  // Build the strip once per video. Frames are decoded in order so a long clip
+  // fills in visibly rather than freezing the sheet until all of them land.
+  useEffect(() => {
+    if (!visible || !uri || durationMs <= 0) return;
+    let active = true;
+    setStrip([]);
+    setPosition(0);
+    setPreview(null);
+    (async () => {
+      const frames: string[] = [];
+      for (let i = 0; i < COVER_STRIP_FRAMES; i += 1) {
+        const time = (durationMs * i) / (COVER_STRIP_FRAMES - 1);
+        try {
+          const frame = await VideoThumbnails.getThumbnailAsync(uri, {
+            // The very last frame of a clip is often undecodable; step back.
+            time: Math.max(Math.min(time, durationMs - 120), 0),
+            quality: 0.4,
+          });
+          if (!active) return;
+          frames.push(frame.uri);
+          setStrip([...frames]);
+        } catch {
+          // A gap in the strip is survivable; the exact frame still decodes.
+        }
+      }
+      if (!active) return;
+      if (frames.length === 0) {
+        onFailRef.current(
+          "BeamLoop couldn't read frames from this video. Upload a cover image instead."
+        );
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [visible, uri, durationMs]);
+
+  const commit = useCallback(
+    async (ratio: number) => {
+      if (!uri || durationMs <= 0) return;
+      setBusy(true);
+      try {
+        setPreview(
+          await frameAt(uri, Math.min(ratio * durationMs, durationMs - 120))
+        );
+      } catch {
+        onFailRef.current(
+          "BeamLoop couldn't lift that frame. Try another point in the video."
+        );
+      } finally {
+        setBusy(false);
+      }
+    },
+    [uri, durationMs]
+  );
+
+  const scrubTo = (x: number) => {
+    if (trackWidth <= 0) return;
+    setPosition(Math.min(Math.max(x / trackWidth, 0), 1));
+  };
+
+  // While dragging, show the nearest already-decoded strip frame so the
+  // preview tracks the finger without waiting on a decode.
+  const nearestStripFrame =
+    strip.length > 0
+      ? strip[
+          Math.min(Math.round(position * (strip.length - 1)), strip.length - 1)
+        ]
+      : undefined;
+  const previewUri = preview?.uri ?? nearestStripFrame;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <Pressable
+        onPress={onClose}
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.58)",
+          justifyContent: "flex-end",
+        }}
+      >
+        <Pressable
+          onPress={() => {}}
+          style={{
+            width: "100%",
+            backgroundColor: palette.sheet,
+            borderTopLeftRadius: radius.sheet,
+            borderTopRightRadius: radius.sheet,
+            borderWidth: 1,
+            borderColor: palette.borderStrong,
+            paddingTop: spacing.lg,
+            paddingHorizontal: spacing.screenX,
+            paddingBottom: Math.max(insets.bottom, spacing.lg),
+            gap: spacing.lg,
+          }}
+        >
+          <View
+            style={[s.row, { justifyContent: "space-between", alignItems: "flex-start" }]}
+          >
+            <View style={{ flex: 1, paddingRight: spacing.md }}>
+              <Text style={s.sectionLabel}>Instagram cover</Text>
+              <Text
+                numberOfLines={2}
+                style={{ ...type.displayTitle, color: palette.text, marginTop: 4 }}
+              >
+                Pick the frame.
+              </Text>
+            </View>
+            <Pressable
+              onPress={onClose}
+              hitSlop={10}
+              style={{ minWidth: 52, alignItems: "flex-end", paddingVertical: 2 }}
+            >
+              <Text style={{ ...type.monoNav, color: palette.textMono }}>Cancel</Text>
+            </Pressable>
+          </View>
+
+          <View
+            style={{
+              alignSelf: "center",
+              width: 168,
+              height: 298,
+              borderRadius: radius.card,
+              overflow: "hidden",
+              backgroundColor: palette.canvas,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {previewUri ? (
+              <Image
+                source={{ uri: previewUri }}
+                style={{ width: "100%", height: "100%" }}
+                resizeMode="cover"
+              />
+            ) : (
+              <Stripes
+                colorA={palette.stripeDarkA}
+                colorB={palette.stripeDarkB}
+                style={{ width: "100%", height: "100%" }}
+              />
+            )}
+          </View>
+
+          {/* scrub strip */}
+          <View
+            onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
+            onStartShouldSetResponder={() => true}
+            onMoveShouldSetResponder={() => true}
+            onResponderGrant={(event) => scrubTo(event.nativeEvent.locationX)}
+            onResponderMove={(event) => scrubTo(event.nativeEvent.locationX)}
+            onResponderRelease={() => void commit(position)}
+            style={{
+              height: 56,
+              borderRadius: radius.tile,
+              overflow: "hidden",
+              backgroundColor: palette.barTrack,
+              flexDirection: "row",
+            }}
+          >
+            {strip.map((frame, index) => (
+              <Image
+                key={`${frame}-${index}`}
+                source={{ uri: frame }}
+                style={{ flex: 1, height: "100%" }}
+                resizeMode="cover"
+              />
+            ))}
+            {trackWidth > 0 && (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: "absolute",
+                  left: Math.min(
+                    Math.max(position * trackWidth - 2, 0),
+                    Math.max(trackWidth - 4, 0)
+                  ),
+                  top: 0,
+                  bottom: 0,
+                  width: 4,
+                  backgroundColor: palette.signal,
+                }}
+              />
+            )}
+          </View>
+
+          <Text style={{ ...type.monoMeta, color: palette.textLabel }}>
+            {durationMs > 0
+              ? `${(position * (durationMs / 1000)).toFixed(1)}S OF ${(durationMs / 1000).toFixed(1)}S`
+              : "DRAG TO CHOOSE A FRAME"}
+          </Text>
+
+          <Pressable
+            disabled={!preview || busy}
+            onPress={() => preview && onChoose(preview)}
+            style={[s.buttonPrimary, (!preview || busy) && s.buttonDisabled]}
+          >
+            <Text style={s.buttonPrimaryText}>
+              {busy ? "Lifting frame…" : preview ? "Use this frame" : "Drag to choose"}
+            </Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 

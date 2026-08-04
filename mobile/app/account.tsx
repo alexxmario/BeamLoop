@@ -21,6 +21,7 @@ import {
   type PlanId,
 } from "../src/api/types";
 import { useAuth } from "../src/auth/AuthContext";
+import { useNotice } from "../src/components/Notice";
 import {
   monoTracking,
   palette,
@@ -55,7 +56,7 @@ export default function AccountScreen() {
   const { user, signOut, deleteAccount } = useAuth();
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [connections, setConnections] = useState<Connection[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const notice = useNotice();
 
   // Refetch on focus so returning from the paywall shows the new plan rather
   // than a stale one.
@@ -67,21 +68,20 @@ export default function AccountScreen() {
           if (!active) return;
           setBilling(status);
           setConnections(list);
-          setError(null);
         })
         .catch((e) => {
           if (!active) return;
-          setError(e instanceof Error ? e.message : "Couldn't load your account");
+          notice(e instanceof Error ? e.message : "Couldn't load your account");
         });
       return () => {
         active = false;
       };
-    }, [])
+    }, [notice])
   );
 
   const openPublicPage = (path: "/support" | "/legal/privacy" | "/legal/terms") =>
     Linking.openURL(`${API_BASE_URL}${path}`).catch(() =>
-      setError("Couldn't open that page. Please try again.")
+      notice("Couldn't open that page. Please try again.")
     );
 
   const confirmSignOut = () => {
@@ -109,10 +109,9 @@ export default function AccountScreen() {
             try {
               await deleteAccount();
             } catch (e) {
-              Alert.alert(
-                "Couldn't delete account",
-                e instanceof Error ? e.message : "Please try again."
-              );
+              notice(e instanceof Error ? e.message : "Please try again.", {
+                title: "Couldn't delete account",
+              });
             }
           },
         },
@@ -154,8 +153,6 @@ export default function AccountScreen() {
           gap: spacing.lg,
         }}
       >
-        {error && <Text style={s.errorText}>{error}</Text>}
-
         {/* ------------------------------------------------ signed in as */}
         <View style={s.card}>
           <Text style={s.sectionLabel}>Signed in as</Text>

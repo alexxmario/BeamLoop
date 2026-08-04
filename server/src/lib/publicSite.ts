@@ -646,7 +646,7 @@ export function pricingPage() {
         <h2>What each plan includes</h2>
         <ul>
           <li><strong>Free</strong> — 2 channels, 10 posts a month, 5 scheduled posts, 30 days of post history.</li>
-          <li><strong>Creator</strong> — 3 channels, 100 posts a month, 50 scheduled posts, per-platform captions and placements, one year of post history.</li>
+          <li><strong>Creator</strong> — 3 channels, 100 posts a month, 50 scheduled posts, per-platform captions, custom Instagram covers, one year of post history.</li>
           <li><strong>Pro</strong> — every channel BeamLoop supports, 500 posts a month, up to 1,000 scheduled posts, Launch Drops, unlimited post history.</li>
         </ul>
 

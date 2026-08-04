@@ -17,7 +17,23 @@ export interface PlanLimits {
   historyDays: number | null;
   platformCaptions: boolean;
   placements: boolean;
+  instagramCover: boolean;
   launchDrops: boolean;
+}
+
+// Instagram is deliberately exempt from the `placements` gate. On Instagram the
+// destination — Post, Reel or Story — is part of publishing at all, not a
+// power-user extra: gating it left free accounts able to connect Instagram but
+// unable to post a Reel or a Story to it, which read as the channel being
+// broken. Facebook placement stays a paid feature.
+export const UNGATED_PLACEMENT_PLATFORMS = new Set<string>(["instagram"]);
+
+// The placements a plan is actually charged for, i.e. everything the composer
+// sent minus the ones every plan may choose freely.
+export function gatedPlacements(placements: Record<string, unknown>): string[] {
+  return Object.keys(placements).filter(
+    (platform) => !UNGATED_PLACEMENT_PLATFORMS.has(platform)
+  );
 }
 
 export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
@@ -29,6 +45,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     historyDays: 30,
     platformCaptions: false,
     placements: false,
+    instagramCover: false,
     launchDrops: false,
   },
   creator: {
@@ -39,6 +56,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     historyDays: 365,
     platformCaptions: true,
     placements: true,
+    instagramCover: true,
     launchDrops: false,
   },
   pro: {
@@ -53,6 +71,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     historyDays: null,
     platformCaptions: true,
     placements: true,
+    instagramCover: true,
     launchDrops: true,
   },
 };
