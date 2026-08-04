@@ -76,6 +76,15 @@ accounts. Replace `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET` with the
 production pair from the app's Credentials panel once the audit passes, and make
 sure the same redirect URI is registered on the production app too.
 
+### 3c. Set the creator's TikTok account to private — while unaudited
+
+TikTok's guidelines: *"All user accounts using the API client to post must be
+set to private at the time of posting."* This is separate from the post's own
+privacy level — an unaudited client is refused outright by any account that
+isn't itself private, and the error is a bare link to the guidelines. Any
+account used for the demo must be switched to Private in TikTok's own settings
+(Settings and privacy → Privacy). It can go back to public after approval.
+
 ### 4. Flip the ceiling — one env var
 
 `TIKTOK_PRIVACY` on Railway is currently `SELF_ONLY`, which the server treats as

@@ -92,6 +92,16 @@ try {
     "An invalid token must tell the creator to reconnect"
   );
   expect(
+    describeTikTokError(
+      new TikTokError(
+        "Please review our integration guidelines at https://developers.tiktok.com/...",
+        "unaudited_client_can_only_post_to_private_accounts",
+        403
+      )
+    ).includes("private"),
+    "The unaudited-client rule must say which setting to change, not link to docs"
+  );
+  expect(
     describeTikTokError(new TikTokError("odd", "unmapped_code", 400)) === "odd",
     "Unmapped codes must pass their message through"
   );

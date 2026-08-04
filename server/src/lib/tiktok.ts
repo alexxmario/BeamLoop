@@ -326,6 +326,12 @@ export function describeTikTokError(error: unknown): string {
   switch (error.code) {
     case "reached_active_user_cap":
       return "TikTok is limiting how many people can post through BeamLoop today. Try again tomorrow.";
+    // Until the Direct Post audit passes, TikTok refuses to post to any account
+    // that isn't itself private — separately from the post's own privacy level.
+    // Their own message is a bare link to the guidelines, which tells a creator
+    // nothing about what to change.
+    case "unaudited_client_can_only_post_to_private_accounts":
+      return "TikTok currently only accepts posts from BeamLoop to private accounts. Set your TikTok account to private in Settings and privacy → Privacy, then try again.";
     case "spam_risk_too_many_posts":
       return "You've hit TikTok's daily posting limit for this account. Try again tomorrow.";
     case "spam_risk_user_banned_from_posting":
