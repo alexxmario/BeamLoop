@@ -26,7 +26,10 @@ The backend is a Node/Fastify server in `server/`. It stores data in SQLite
    | `DATA_DIR` | `/app/data` (matches the volume mount) |
    | `MEDIA_RETENTION_HOURS` | `168` (retain retry media for seven days) |
    | `CONNECT_REDIRECT_URL` | `beamloop://connections/callback` |
-   | `TIKTOK_PRIVACY` | `public` (the default; leave unset). Only set `private` if you move to a White Label Post for Me project whose own TikTok app hasn't passed the Direct Post audit. TikTok's own names (`PUBLIC_TO_EVERYONE`, `SELF_ONLY`) are still accepted and translated |
+   | `TIKTOK_CLIENT_KEY` | from your TikTok developer app. Until this and the secret are set, TikTok reports itself unavailable |
+   | `TIKTOK_CLIENT_SECRET` | from your TikTok developer app |
+   | `TIKTOK_REDIRECT_URL` | `https://beamloop-production.up.railway.app/connections/tiktok/callback` (the default). Must match a Redirect URI on the TikTok app exactly |
+   | `TIKTOK_PRIVACY` | a **ceiling** on what a creator may choose, not a default. Keep it `private` until your TikTok app passes the Direct Post audit — an unaudited client may only post privately. Delete it after approval (defaults to `public`). TikTok's own names (`PUBLIC_TO_EVERYONE`, `SELF_ONLY`) are accepted and translated |
    | `CORS_ORIGIN` | optional comma-separated web origins; leave unset to disable browser CORS |
    | `PUBLIC_LEGAL_NAME` | exact person or company operating BeamLoop |
    | `SUPPORT_EMAIL` | monitored address shown to users and App Review |

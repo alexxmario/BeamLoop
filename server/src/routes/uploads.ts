@@ -28,6 +28,13 @@ import {
 } from "../lib/platforms.js";
 import { config } from "../config.js";
 import {
+  describeTikTokError,
+  isTikTokConfigured,
+  tiktok,
+  TikTokError,
+} from "../lib/tiktok.js";
+import { accessTokenForUser } from "../lib/tiktokAccounts.js";
+import {
   postForMe,
   type PfmPlatform,
   type PfmPlatformConfig,
@@ -316,8 +323,107 @@ function errText(error: unknown): string {
   return "Publishing failed";
 }
 
+// TikTok caps a title at 2200 UTF-16 units.
+const TIKTOK_TITLE_LIMIT = 2200;
+
+/**
+ * Publish one video to TikTok through our own integration.
+ *
+ * Returns a normalized result rather than throwing, so a TikTok failure reads
+ * like any other channel's and never takes the rest of the post down with it.
+ *
+ * TikTok has no scheduling API, so a scheduled post reaches here only when the
+ * queue fires it — by which point it is an immediate publish.
+ */
+async function publishToTikTok(input: {
+  userId: string;
+  caption: string;
+  title: string;
+  kind: "video" | "photos";
+  media: MediaFile[];
+  options?: TikTokOptions;
+  scheduledAt?: string;
+  log?: { warn: (obj: unknown, msg: string) => void };
+}): Promise<{ platform: string } & PlatformResult> {
+  const fail = (error: string, extra: Partial<PlatformResult> = {}) => ({
+    platform: "tiktok",
+    success: false,
+    error,
+    ...extra,
+  });
+
+  if (!isTikTokConfigured()) {
+    return fail("TikTok isn't available yet.");
+  }
+  // Photo posts use a different TikTok endpoint we haven't built; refuse
+  // clearly rather than sending a video payload that can only fail.
+  if (input.kind !== "video") {
+    return fail("TikTok posts from BeamLoop have to be videos.");
+  }
+  const file = input.media[0];
+  if (!file) return fail("The video for this post is no longer available.");
+
+  const accessToken = await accessTokenForUser(input.userId, input.log);
+  if (!accessToken) {
+    return fail("Reconnect TikTok in BeamLoop to keep posting.", {
+      connectionIssue: "reconnect" as const,
+    });
+  }
+
+  const options = input.options;
+  // Validation guarantees a chosen privacy on any post carrying options; the
+  // fallback covers a post stored before these controls existed.
+  const privacy =
+    options?.privacy === "private"
+      ? "SELF_ONLY"
+      : options?.privacy === "public"
+        ? "PUBLIC_TO_EVERYONE"
+        : config.TIKTOK_PRIVACY === "private"
+          ? "SELF_ONLY"
+          : "PUBLIC_TO_EVERYONE";
+
+  try {
+    const { size } = await fsp.stat(file.path);
+    const { publishId, uploadUrl } = await tiktok.initDirectPost(
+      accessToken,
+      {
+        privacy_level: privacy,
+        title: input.title.slice(0, TIKTOK_TITLE_LIMIT),
+        // TikTok's flags are the inverse of the composer's "let viewers…".
+        disable_comment: !(options?.allowComment ?? false),
+        disable_duet: !(options?.allowDuet ?? false),
+        disable_stitch: !(options?.allowStitch ?? false),
+        brand_organic_toggle: options?.discloseYourBrand ?? false,
+        brand_content_toggle: options?.discloseBrandedContent ?? false,
+        is_aigc: options?.isAiGenerated ?? false,
+      },
+      size
+    );
+    await tiktok.uploadVideo(uploadUrl, file.path, file.mimetype);
+    // TikTok processes asynchronously. The upload is accepted here; History
+    // resolves the outcome from the status endpoint.
+    return {
+      platform: "tiktok",
+      success: false,
+      pending: true,
+      post_id: publishId,
+    };
+  } catch (err) {
+    const message = describeTikTokError(err);
+    input.log?.warn({ err, userId: input.userId }, "Publishing to TikTok failed");
+    return fail(
+      message,
+      err instanceof TikTokError &&
+        (err.code === "access_token_invalid" || err.code === "scope_not_authorized")
+        ? { connectionIssue: "reconnect" as const }
+        : {}
+    );
+  }
+}
+
 // Publish one post to the chosen platforms and return a normalized per-platform
-// result array. Every platform is published through Post for Me.
+// result array. Everything goes through Post for Me except TikTok, which
+// BeamLoop publishes to itself (see lib/tiktok.ts for why).
 async function publish(opts: {
   userId: string;
   socialExternalId?: string;
@@ -331,6 +437,7 @@ async function publish(opts: {
   tiktokOptions?: TikTokOptions;
   scheduledAt?: string;
   providerExternalId?: string;
+  log?: { warn: (obj: unknown, msg: string) => void };
   onProviderAccepted?: (
     postId: string,
     accountPlatforms: Record<string, string>
@@ -352,14 +459,32 @@ async function publish(opts: {
     tiktokOptions,
     scheduledAt,
     providerExternalId,
+    log,
     onProviderAccepted,
   } = opts;
   const results: Array<{ platform: string } & PlatformResult> = [];
   let pfmPostId: string | undefined;
 
-  const oauthPlatforms = platforms.filter((p): p is PfmPlatform =>
-    (OAUTH_PLATFORMS as readonly string[]).includes(p)
+  // TikTok is handled by our own client, so it never reaches Post for Me.
+  const oauthPlatforms = platforms.filter(
+    (p): p is PfmPlatform =>
+      p !== "tiktok" && (OAUTH_PLATFORMS as readonly string[]).includes(p)
   );
+
+  if (platforms.includes("tiktok")) {
+    results.push(
+      await publishToTikTok({
+        userId,
+        caption,
+        title: overrides.tiktok || caption,
+        kind,
+        media,
+        options: tiktokOptions,
+        scheduledAt,
+        log,
+      })
+    );
+  }
 
   if (oauthPlatforms.length > 0) {
     const accounts = await postForMe.listAccounts(socialExternalId);
@@ -479,23 +604,92 @@ const pendingRefreshAt = new Map<string, number>();
 // so History self-heals once the platforms finish publishing. Calls are
 // throttled per user and all pending provider post ids are fetched in one
 // request.
-async function refreshPending(userId: string, socialExternalId = userId): Promise<void> {
+/**
+ * Resolve TikTok posts still waiting on the platform.
+ *
+ * TikTok accepts an upload and processes it asynchronously, so the publish id
+ * captured at upload time is exchanged here for a real outcome. Never throws:
+ * a status lookup that fails leaves the result pending for the next pass.
+ */
+async function refreshPendingTikTok(
+  userId: string,
+  posts: PostRecord[],
+  log?: { warn: (obj: unknown, msg: string) => void }
+): Promise<void> {
+  const waiting = posts.filter((post) =>
+    post.results.some((r) => r.platform === "tiktok" && r.pending && r.post_id)
+  );
+  if (waiting.length === 0) return;
+
+  const accessToken = await accessTokenForUser(userId, log);
+  if (!accessToken) return;
+
+  for (const post of waiting) {
+    const pending = post.results.find(
+      (r) => r.platform === "tiktok" && r.pending && r.post_id
+    );
+    if (!pending?.post_id) continue;
+    try {
+      const status = await tiktok.publishStatus(accessToken, pending.post_id);
+      if (status.status === "PUBLISH_COMPLETE") {
+        const platformId = status.publicaly_available_post_id?.[0];
+        postStore.updateResults(post.id, [
+          {
+            platform: "tiktok",
+            success: true,
+            ...(platformId ? { post_id: platformId } : {}),
+          },
+        ]);
+        await notifyPostSettled(post.id, log as never);
+      } else if (status.status === "FAILED") {
+        postStore.updateResults(post.id, [
+          {
+            platform: "tiktok",
+            success: false,
+            error: describeTikTokError(
+              new TikTokError(
+                status.fail_reason || "TikTok couldn't publish this video.",
+                status.fail_reason || "failed",
+                200
+              )
+            ),
+          },
+        ]);
+        await notifyPostSettled(post.id, log as never);
+      }
+      // Any other status means TikTok is still working; leave it pending.
+    } catch (err) {
+      log?.warn({ err, postId: post.id }, "TikTok publish status lookup failed");
+    }
+  }
+}
+
+async function refreshPending(
+  userId: string,
+  socialExternalId = userId,
+  log?: { warn: (obj: unknown, msg: string) => void }
+): Promise<void> {
   const now = Date.now();
   const lastRefresh = pendingRefreshAt.get(userId) ?? 0;
   if (now - lastRefresh < PENDING_REFRESH_MIN_MS) return;
   pendingRefreshAt.set(userId, now);
 
-  const posts = postStore
+  const settled = postStore
     .listByUser(userId)
-    .filter(
-      (p) =>
-        (!p.scheduledAt || new Date(p.scheduledAt).getTime() <= now) &&
-        p.results.some(
-          (r) =>
-            r.pending &&
-            (OAUTH_PLATFORMS as readonly string[]).includes(r.platform)
-        )
-    );
+    .filter((p) => !p.scheduledAt || new Date(p.scheduledAt).getTime() <= now);
+
+  // TikTok is ours to poll, and is resolved independently so a Post for Me
+  // outage can't hold up a TikTok result (or the reverse).
+  await refreshPendingTikTok(userId, settled, log).catch(() => {});
+
+  const posts = settled.filter((p) =>
+    p.results.some(
+      (r) =>
+        r.pending &&
+        r.platform !== "tiktok" &&
+        (OAUTH_PLATFORMS as readonly string[]).includes(r.platform)
+    )
+  );
   if (posts.length === 0) return;
 
   // A process may exit after Post for Me accepted a create request but before
@@ -877,6 +1071,7 @@ export default async function uploadRoutes(app: FastifyInstance) {
             placements,
             instagramCover: instagramCoverFile,
             tiktokOptions,
+            log: app.log,
             scheduledAt,
             providerExternalId: hasOauthPlatform ? postId : undefined,
             onProviderAccepted: (pfmPostId, pfmAccountPlatforms) =>
@@ -1030,6 +1225,7 @@ export default async function uploadRoutes(app: FastifyInstance) {
         placements: post.placements,
         instagramCover: post.instagramCoverFile,
         tiktokOptions: post.tiktokOptions,
+        log: app.log,
         kind: post.kind,
         media: post.mediaFiles,
         providerExternalId,
@@ -1123,7 +1319,7 @@ export default async function uploadRoutes(app: FastifyInstance) {
     if (!post || post.userId !== req.user.id) {
       return reply.code(404).send({ error: "Post not found" });
     }
-    await refreshPending(req.user.id, req.user.socialExternalId).catch((err) =>
+    await refreshPending(req.user.id, req.user.socialExternalId, app.log).catch((err) =>
       app.log.warn({ err, postId: post.id }, "Provider status refresh failed")
     );
     const updated = postStore.findById(post.id);
@@ -1134,7 +1330,7 @@ export default async function uploadRoutes(app: FastifyInstance) {
   // First refresh any still-"pending" async results so they resolve to
   // success/failure once the platforms finish publishing.
   app.get("/uploads/history", async (req) => {
-    await refreshPending(req.user.id, req.user.socialExternalId).catch((err) =>
+    await refreshPending(req.user.id, req.user.socialExternalId, app.log).catch((err) =>
       app.log.warn({ err }, "Provider status refresh failed")
     );
     const { limits } = subscriptionStore.entitlementForUser(req.user.id);

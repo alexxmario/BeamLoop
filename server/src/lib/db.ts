@@ -77,6 +77,25 @@ db.exec(`
     createdAt TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens (userId);
+
+  -- TikTok is the one platform BeamLoop talks to directly rather than through
+  -- Post for Me, so it is the only place we hold a third party's OAuth tokens.
+  -- Both token columns are AES-256-GCM ciphertext (see lib/secrets.ts); a copy
+  -- of this database is not enough to post as anybody.
+  CREATE TABLE IF NOT EXISTS tiktok_accounts (
+    userId TEXT PRIMARY KEY,
+    openId TEXT NOT NULL,
+    username TEXT,
+    displayName TEXT,
+    avatarUrl TEXT,
+    accessToken TEXT NOT NULL,
+    refreshToken TEXT NOT NULL,
+    accessExpiresAt TEXT NOT NULL,
+    refreshExpiresAt TEXT NOT NULL,
+    scope TEXT,
+    createdAt TEXT NOT NULL,
+    updatedAt TEXT NOT NULL
+  );
 `);
 
 // Existing installations created the posts table before idempotency support.

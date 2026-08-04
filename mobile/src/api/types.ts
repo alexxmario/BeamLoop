@@ -75,6 +75,22 @@ export interface TikTokOptions {
   isAiGenerated: boolean;
 }
 
+/**
+ * The creator's live TikTok posting permissions.
+ *
+ * TikTok requires the posting screen to reflect this: only the privacy options
+ * it returns may be offered, and an interaction the creator disabled in their
+ * TikTok settings must not be selectable here.
+ */
+export interface TikTokCreatorInfo {
+  creator: { username: string; nickname: string; avatarUrl: string };
+  privacyOptions: string[];
+  commentDisabled: boolean;
+  duetDisabled: boolean;
+  stitchDisabled: boolean;
+  maxVideoDurationSec: number;
+}
+
 // TikTok's audit requires nothing to be pre-selected: no privacy level, no
 // interaction checked, nothing declared commercial.
 export const DEFAULT_TIKTOK_OPTIONS: TikTokOptions = {

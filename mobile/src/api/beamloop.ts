@@ -8,6 +8,7 @@ import type {
   UploadUsage,
   BillingStatus,
   TikTokOptions,
+  TikTokCreatorInfo,
 } from "./types";
 
 export async function fetchBillingStatus() {
@@ -54,6 +55,12 @@ export async function fetchMe() {
 export async function deleteAccount() {
   await api("/auth/me", { method: "DELETE" });
   await tokenStorage.clear();
+}
+
+// TikTok's rules ask for this on each open of the posting screen rather than
+// from a cache, so the options shown are the ones TikTok allows right now.
+export function fetchTikTokCreatorInfo() {
+  return api<TikTokCreatorInfo>("/connections/tiktok/creator");
 }
 
 export async function fetchConnections() {

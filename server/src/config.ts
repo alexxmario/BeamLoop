@@ -9,6 +9,17 @@ const envSchema = z.object({
   // Secret returned when the production Post for Me webhook is created.
   // Webhook requests are rejected unless this is configured.
   POSTFORME_WEBHOOK_SECRET: z.string().min(16).optional(),
+  // TikTok is integrated directly rather than through Post for Me (see
+  // lib/tiktok.ts for why). Without these the channel reports itself as
+  // unavailable instead of failing at publish time.
+  TIKTOK_CLIENT_KEY: z.string().min(1).optional(),
+  TIKTOK_CLIENT_SECRET: z.string().min(1).optional(),
+  // Must match a Redirect URI registered on the TikTok app exactly. It is our
+  // own domain, so nothing here depends on a third party's callback.
+  TIKTOK_REDIRECT_URL: z
+    .string()
+    .url()
+    .default("https://beamloop-production.up.railway.app/connections/tiktok/callback"),
   // Privacy level sent with every TikTok post. Post for Me takes its own
   // "public"/"private" values here, NOT TikTok's raw PUBLIC_TO_EVERYONE /
   // SELF_ONLY enum (verified against their OpenAPI spec), so TikTok's names are

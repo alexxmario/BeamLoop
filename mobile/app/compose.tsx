@@ -34,6 +34,7 @@ import Svg, {
 import {
   fetchBillingStatus,
   fetchConnections,
+  fetchTikTokCreatorInfo,
   fetchPostStatus,
   uploadPhotos,
   uploadVideo,
@@ -49,6 +50,7 @@ import {
   type Platform,
   type PostPlacement,
   type PostRecord,
+  type TikTokCreatorInfo,
   type TikTokOptions,
 } from "../src/api/types";
 import { useNotice } from "../src/components/Notice";
@@ -393,6 +395,7 @@ export default function ComposeModal() {
   const [instagramCover, setInstagramCover] = useState<PickedMedia | null>(null);
   const [coverFrameOpen, setCoverFrameOpen] = useState(false);
   const [tiktok, setTiktok] = useState<TikTokOptions>(DEFAULT_TIKTOK_OPTIONS);
+  const [tiktokCreator, setTiktokCreator] = useState<TikTokCreatorInfo | null>(null);
   const [limits, setLimits] = useState<BillingStatus["entitlement"]["limits"] | null>(
     null
   );
@@ -613,6 +616,26 @@ export default function ComposeModal() {
       notice("Couldn't process that image. Try a different one.");
     }
   };
+
+  // TikTok asks for the creator's current permissions each time the posting
+  // screen is shown, so this refetches on selection rather than caching. A
+  // failure is silent: the card falls back to offering both privacy levels and
+  // the server still enforces whatever TikTok accepts.
+  useEffect(() => {
+    if (!selected.has("tiktok")) {
+      setTiktokCreator(null);
+      return;
+    }
+    let active = true;
+    fetchTikTokCreatorInfo()
+      .then((info) => {
+        if (active) setTiktokCreator(info);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [selected]);
 
   const toggle = (platform: Platform) => {
     setIdempotencyKey(createIdempotencyKey());
@@ -914,6 +937,7 @@ export default function ComposeModal() {
             value={tiktok}
             mediaKind={media?.kind ?? null}
             account={connections.find((c) => c.platform === "tiktok")}
+            creator={tiktokCreator}
             onChange={(next) => {
               setTiktok(next);
               setIdempotencyKey(createIdempotencyKey());
@@ -1782,19 +1806,31 @@ function TikTokOptionsCard({
   value,
   mediaKind,
   account,
+  creator,
   onChange,
 }: {
   value: TikTokOptions;
   mediaKind: Media["kind"] | null;
   account: Connection | undefined;
+  creator: TikTokCreatorInfo | null;
   onChange: (value: TikTokOptions) => void;
 }) {
   const set = (patch: Partial<TikTokOptions>) => onChange({ ...value, ...patch });
+
+  // Prefer what TikTok just told us over anything cached at connect time.
   const handle =
+    creator?.creator.nickname ||
+    creator?.creator.username ||
     account?.details?.username ||
     account?.details?.display_name ||
     "your TikTok account";
-  const avatar = account?.details?.social_images;
+  const avatar = creator?.creator.avatarUrl || account?.details?.social_images;
+
+  // Only offer what this account is actually allowed to post. Until TikTok
+  // answers we offer both, and the server clamps whatever is chosen.
+  const allowsPublic =
+    !creator || creator.privacyOptions.some((o) => o.startsWith("PUBLIC"));
+  const allowsPrivate = !creator || creator.privacyOptions.includes("SELF_ONLY");
 
   return (
     <View
@@ -1855,8 +1891,11 @@ function TikTokOptionsCard({
           ).map((option) => {
             // A paid partnership is advertising, and advertising can't be
             // hidden — TikTok requires "only me" to be unavailable here.
+            const unavailable =
+              option.value === "public" ? !allowsPublic : !allowsPrivate;
             const blocked =
-              option.value === "private" && value.discloseBrandedContent;
+              unavailable ||
+              (option.value === "private" && value.discloseBrandedContent);
             const active = value.privacy === option.value;
             return (
               <Pressable
@@ -1909,21 +1948,29 @@ function TikTokOptionsCard({
 
       <View style={{ gap: spacing.md }}>
         <Text style={s.sectionLabel}>Let viewers</Text>
+        {/* An interaction the creator disabled in their own TikTok settings
+            must not be offerable here — TikTok checks for exactly this. */}
         <OptionToggle
           label="Comment"
-          value={value.allowComment}
+          detail={creator?.commentDisabled ? "Turned off in your TikTok settings" : undefined}
+          disabled={creator?.commentDisabled}
+          value={value.allowComment && !creator?.commentDisabled}
           onChange={(next) => set({ allowComment: next })}
         />
         {mediaKind === "video" && (
           <>
             <OptionToggle
               label="Duet"
-              value={value.allowDuet}
+              detail={creator?.duetDisabled ? "Turned off in your TikTok settings" : undefined}
+              disabled={creator?.duetDisabled}
+              value={value.allowDuet && !creator?.duetDisabled}
               onChange={(next) => set({ allowDuet: next })}
             />
             <OptionToggle
               label="Stitch"
-              value={value.allowStitch}
+              detail={creator?.stitchDisabled ? "Turned off in your TikTok settings" : undefined}
+              disabled={creator?.stitchDisabled}
+              value={value.allowStitch && !creator?.stitchDisabled}
               onChange={(next) => set({ allowStitch: next })}
             />
           </>

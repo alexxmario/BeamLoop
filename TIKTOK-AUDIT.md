@@ -10,8 +10,20 @@ POST /v2/post/publish/video/init/  ->  403
 { "error": { "code": "reached_active_user_cap" } }
 ```
 
-No code change fixes this. BeamLoop needs its own TikTok API client, audited by
-TikTok, configured in Post for Me as a **White Label** project.
+BeamLoop therefore talks to TikTok **directly** and leaves Post for Me handling
+every other platform. Going through them for TikTok was impossible anyway:
+
+- They send media as `PULL_FROM_URL` from `data.postforme.dev`, and TikTok
+  requires that domain to be verified on the posting app. We can't verify a
+  domain we don't own, and their upload endpoint gives no control over the
+  filename, so a verification file can't be placed there either. `FILE_UPLOAD`,
+  which we use, needs no domain verification at all.
+- TikTok's audit requires the posting screen to reflect a live `creator_info`
+  query. They make that call internally and don't expose it.
+- The consent screen names whoever owns the client key. Through them it read
+  "PostForMe".
+
+What remains is TikTok's own approval, which no architecture avoids.
 
 ## What has to happen, in order
 
@@ -19,12 +31,14 @@ TikTok, configured in Post for Me as a **White Label** project.
 
 - Sign up at <https://developers.tiktok.com/> and create an app for BeamLoop.
 - Add the products **Login Kit** and **Content Posting API**.
-- Request the scopes BeamLoop uses:
-  `user.info.basic`, `video.upload`, `video.publish`, `video.list`.
-- Set the redirect URI to Post for Me's callback:
-  `https://app.postforme.dev/callback/tiktok/account`
-  (confirm this exact value with Post for Me before submitting — it must match
-  whatever their White Label flow uses, and TikTok rejects a mismatch at login.)
+- Request exactly the scopes BeamLoop uses: `user.info.basic` and
+  `video.publish`. Nothing else — TikTok delays a review over any scope it
+  can't see demonstrated.
+- Platform: **Web** (the OAuth flow is web-based; TikTok's iOS platform expects
+  a Universal Link, which this flow never uses).
+- Redirect URI — our own, on the domain you already verified:
+  `https://beamloop-production.up.railway.app/connections/tiktok/callback`
+- Skip "Verify domains". That applies to `pull_by_url`; we use `push_by_file`.
 - Have ready: the App Store listing URL, the privacy policy at
   `<PUBLIC_BASE_URL>/legal/privacy`, and the terms at `<PUBLIC_BASE_URL>/legal/terms`.
 
@@ -40,12 +54,18 @@ TikTok's UX rules line by line.
 
 Expect **1–4 weeks**, often with a round of feedback.
 
-### 3. Configure the credentials in Post for Me — you
+### 3. Set two environment variables — you
 
-Switch the project to White Label and enter the TikTok client key and secret.
-White Label is on their paid tier (from $10/mo at the time of writing). Confirm
-with their support whether the redirect URI above is right for White Label
-projects, since Quickstart uses their own.
+Once the app exists, put its credentials in Railway:
+
+```
+TIKTOK_CLIENT_KEY
+TIKTOK_CLIENT_SECRET
+```
+
+Nothing else changes. No Post for Me plan upgrade, no White Label project. Until
+both are set, TikTok reports itself unavailable and the connect button returns a
+clear "TikTok isn't available yet" rather than failing at publish time.
 
 ### 4. Flip the ceiling — one env var
 
@@ -72,21 +92,14 @@ TikTok's UX requirements, and where BeamLoop meets them
 | "Only me" unavailable for branded content | Disabled, and turning it on forces public |
 | Consent text varies by disclosure | Music Usage Confirmation / + Branded Content Policy |
 | Creator has full control of the caption | Shared caption plus a per-platform override |
+| Reflects a live `creator_info` query | Fetched each time TikTok is selected; only the privacy levels TikTok returns are offered, and interactions the creator disabled on their account are greyed out |
 
-## The one gap to resolve with Post for Me
+## Where the code lives
 
-TikTok also requires the posting screen to reflect a live `creator_info/query`
-call: the privacy options offered must match what that endpoint returns for the
-account, and any interaction the creator has disabled in their TikTok settings
-must appear greyed out.
-
-Post for Me calls `creator_info/query` internally — it is visible in their
-result traces — but **does not expose it through their API**, so BeamLoop cannot
-currently reflect it. Ask them directly:
-
-1. Can `creator_info` be exposed for a connected TikTok account?
-2. For White Label customers, do they provide audit guidance, or has a customer
-   passed the audit through their integration before?
-
-If the answer to (1) is no, raise it in the audit submission rather than letting
-a reviewer find it.
+- `server/src/lib/tiktok.ts` — OAuth, `creator_info`, `FILE_UPLOAD` init, chunked
+  upload, publish status, and creator-facing error messages
+- `server/src/lib/tiktokAccounts.ts` — per-user tokens, refreshed automatically
+- `server/src/lib/secrets.ts` — AES-256-GCM for tokens at rest, keyed from
+  `APP_JWT_SECRET` (rotating it disconnects TikTok rather than exposing anything)
+- `server/src/routes/tiktokAuth.ts` — the public OAuth callback
+- `npm run test:tiktok-contract` — contract checks that run without credentials

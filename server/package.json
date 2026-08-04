@@ -12,7 +12,8 @@
     "test:webhook-contract": "node scripts/webhook-contract-check.mjs",
     "test:history-contract": "node scripts/history-contract-check.mjs",
     "test:billing-contract": "npm run build && node scripts/billing-contract-check.mjs",
-    "release:check": "node scripts/release-check.mjs"
+    "release:check": "node scripts/release-check.mjs",
+    "test:tiktok-contract": "npm run build && node scripts/tiktok-contract-check.mjs"
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",

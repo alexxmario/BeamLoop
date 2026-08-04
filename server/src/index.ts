@@ -6,6 +6,7 @@ import { config } from "./config.js";
 import authPlugin from "./plugins/auth.js";
 import authRoutes from "./routes/auth.js";
 import connectionRoutes from "./routes/connections.js";
+import tiktokAuthRoutes from "./routes/tiktokAuth.js";
 import uploadRoutes from "./routes/uploads.js";
 import legalRoutes from "./routes/legal.js";
 import adminRoutes from "./routes/admin.js";
@@ -63,6 +64,8 @@ await app.register(webhookRoutes);
 await app.register(billingRoutes);
 await app.register(authRoutes);
 await app.register(notificationRoutes);
+// Public: TikTok redirects a browser here, which carries no bearer token.
+await app.register(tiktokAuthRoutes);
 await app.register(connectionRoutes);
 await app.register(uploadRoutes);
 
