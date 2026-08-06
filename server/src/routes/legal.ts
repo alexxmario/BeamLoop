@@ -8,6 +8,7 @@ import {
   accountDeletionPage,
   crossPostReelsPage,
   landingPage,
+  guidesIndexPage,
   postTikTokInstagramPage,
   pricingPage,
   resetPasswordPage,
@@ -49,6 +50,7 @@ export default async function legalRoutes(app: FastifyInstance) {
 
   // Content pages targeting high-intent search. Listed in sitemap.xml.
   app.get("/pricing", async (_req, reply) => sendPage(reply, pricingPage()));
+  app.get("/guides", async (_req, reply) => sendPage(reply, guidesIndexPage()));
   app.get("/guides/post-tiktok-instagram-at-once", async (_req, reply) =>
     sendPage(reply, postTikTokInstagramPage())
   );

@@ -258,11 +258,15 @@ function navLink(path: string, href: string, label: string, section: string) {
   const active =
     section === "home"
       ? path === "/"
-      : section === "support"
-        ? path === "/support" || path === "/account-deletion"
-        : section === "privacy"
-          ? path === "/legal/privacy"
-          : path === "/legal/terms";
+      : section === "pricing"
+        ? path === "/pricing"
+        : section === "guides"
+          ? path.startsWith("/guides")
+          : section === "support"
+            ? path === "/support" || path === "/account-deletion"
+            : section === "privacy"
+              ? path === "/legal/privacy"
+              : path === "/legal/terms";
   return `<a class="navlink${active ? " active" : ""}" href="${href}"${active ? ' aria-current="page"' : ""}>${label}</a>`;
 }
 
@@ -316,9 +320,9 @@ function shell(options: {
       <a class="brand" href="/"><img class="app-icon" src="/assets/app-icon.png" alt=""><span>BeamLoop</span></a>
       <div class="navlinks">
         ${navLink(options.path, "/", "Home", "home")}
+        ${navLink(options.path, "/pricing", "Pricing", "pricing")}
+        ${navLink(options.path, "/guides", "Guides", "guides")}
         ${navLink(options.path, "/support", "Support", "support")}
-        ${navLink(options.path, "/legal/privacy", "Privacy", "privacy")}
-        ${navLink(options.path, "/legal/terms", "Terms", "terms")}
       </div>
     </nav>
   </header>
@@ -327,6 +331,8 @@ function shell(options: {
     <div class="wrap footer-row">
       <span>© 2026 ${legalName}. Publish once. Be everywhere.</span>
       <span class="footer-links">
+        <a href="/pricing">Pricing</a>
+        <a href="/guides">Guides</a>
         <a href="/support">Support</a>
         <a href="/account-deletion">Delete account</a>
         <a href="/legal/privacy">Privacy</a>
@@ -665,6 +671,36 @@ export function pricingPage() {
   });
 }
 
+export function guidesIndexPage() {
+  return shell({
+    title: "Guides",
+    description:
+      "Practical guides to cross-posting: publishing to TikTok and Instagram at once, and getting one vertical video onto every short-form platform without watermarks.",
+    path: "/guides",
+    content: `
+      <section class="legal-hero wrap">
+        <span class="eyebrow">Guides</span>
+        <h1>How to post everywhere at once.</h1>
+        <p class="lede" style="margin:0">Straightforward walkthroughs of the problems cross-posting actually creates — watermarks, aspect ratios, captions that suit one platform and embarrass you on another.</p>
+      </section>
+      <article class="prose wrap">
+        <h2><a href="/guides/post-tiktok-instagram-at-once">How to post to TikTok and Instagram at the same time</a></h2>
+        <p>Three ways to publish one video to both — native sharing, schedulers, and publishing straight from your phone — and the trade-offs of each. Includes why reposting a downloaded TikTok hurts your reach on Instagram.</p>
+
+        <h2><a href="/guides/cross-post-reels-shorts-tiktok">Cross-post Reels to TikTok and YouTube Shorts</a></h2>
+        <p>One vertical video, every short-form platform. What each one accepts, where the crops differ, and how to avoid the watermark problem entirely.</p>
+
+        <h2>More on BeamLoop</h2>
+        <ul>
+          <li><a href="/pricing">Pricing</a> — what each plan includes, and what happens at a limit.</li>
+          <li><a href="/support">Support</a> — how to get help, and how quickly we answer.</li>
+          <li><a href="/account-deletion">Deleting your account</a> — what is removed, and what is not.</li>
+        </ul>
+        ${storeCta()}
+      </article>`,
+  });
+}
+
 export function postTikTokInstagramPage() {
   return shell({
     title: "How to Post to TikTok and Instagram at the Same Time",
@@ -763,6 +799,7 @@ export function sitemapXml() {
     "/",
     "/support",
     "/pricing",
+    "/guides",
     "/guides/post-tiktok-instagram-at-once",
     "/guides/cross-post-reels-shorts-tiktok",
     "/account-deletion",
