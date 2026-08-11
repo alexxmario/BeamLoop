@@ -153,17 +153,9 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
 // Platforms not yet enabled, shown with a "Soon" badge rather than being
 // connectable or selectable.
 //
-// TikTok is built and working end to end, but our TikTok API client is still
-// awaiting the Content Posting audit. Until it passes we hold a *sandbox*
-// client key, which only authorizes the handful of accounts registered as
-// sandbox target users — everyone else is turned away at TikTok's login with
-// `non_sandbox_target`. Hiding it here is deliberately client-side only: the
-// server stays ready, so lifting this line plus swapping to the production
-// credentials is the whole release. See TIKTOK-AUDIT.md.
-//
 // LinkedIn is blocked upstream — the provider's shared LinkedIn OAuth app
 // isn't authorized for the `openid` scope, so LinkedIn rejects the grant
 // before consent and no auth code is ever issued.
-export const COMING_SOON = new Set<Platform>(["tiktok", "threads", "linkedin"]);
+export const COMING_SOON = new Set<Platform>(["threads", "linkedin"]);
 
 export const isComingSoon = (platform: Platform) => COMING_SOON.has(platform);
