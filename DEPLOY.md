@@ -29,7 +29,7 @@ The backend is a Node/Fastify server in `server/`. It stores data in SQLite
    | `TIKTOK_CLIENT_KEY` | production key from your TikTok app's Credentials panel. An `sb` prefix is the sandbox key and only authorizes sandbox target users. Until this and the secret are set, TikTok reports itself unavailable |
    | `TIKTOK_CLIENT_SECRET` | from your TikTok developer app |
    | `TIKTOK_REDIRECT_URL` | `https://beamloop-production.up.railway.app/connections/tiktok/callback` (the default). Must match a Redirect URI on the TikTok app exactly |
-   | `TIKTOK_PRIVACY` | **leave unset.** It is a ceiling on what a creator may choose, not a default — only needed for an unaudited TikTok client, which forces `SELF_ONLY`. Setting it in production silently makes every TikTok post private |
+   | `TIKTOK_PRIVACY` | **`private` until the Direct Post audit passes**, then delete it. It is a ceiling on what a creator may choose, not a default. An unaudited client may only publish `SELF_ONLY`, so while unset every TikTok post is refused; once audited, leaving it set silently makes every TikTok post private. See [TIKTOK-AUDIT.md](TIKTOK-AUDIT.md) |
    | `CORS_ORIGIN` | optional comma-separated web origins; leave unset to disable browser CORS |
    | `PUBLIC_LEGAL_NAME` | exact person or company operating BeamLoop |
    | `SUPPORT_EMAIL` | monitored address shown to users and App Review |

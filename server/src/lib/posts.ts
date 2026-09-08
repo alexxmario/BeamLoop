@@ -28,15 +28,55 @@ export interface StoredMedia {
  * sees a post and to declare commercial content, so these travel with the post
  * rather than coming from server configuration.
  */
+/**
+ * TikTok's own privacy levels, spelled their way.
+ *
+ * The composer has to offer exactly the levels `creator_info` returns for that
+ * account — no more, no fewer — so this cannot be a simplified public/private
+ * pair: an account whose options include "Friends" must be able to pick it.
+ */
+export type TikTokPrivacy =
+  | "PUBLIC_TO_EVERYONE"
+  | "MUTUAL_FOLLOW_FRIENDS"
+  | "FOLLOWER_OF_CREATOR"
+  | "SELF_ONLY";
+
+export const TIKTOK_PRIVACY_LEVELS: readonly TikTokPrivacy[] = [
+  "PUBLIC_TO_EVERYONE",
+  "MUTUAL_FOLLOW_FRIENDS",
+  "FOLLOWER_OF_CREATOR",
+  "SELF_ONLY",
+];
+
+/**
+ * Reads a privacy level off the wire or off a stored post.
+ *
+ * Accepts the "public"/"private" pair posts were written with before the levels
+ * were spelled TikTok's way, so a retry of an old post still publishes as its
+ * creator intended. Anything unrecognised is null, which validation rejects
+ * rather than defaulting — TikTok forbids the app choosing on the creator's
+ * behalf.
+ */
+export function parseTikTokPrivacy(value: unknown): TikTokPrivacy | null {
+  if (typeof value !== "string") return null;
+  const raw = value.trim().toUpperCase();
+  if (raw === "PUBLIC") return "PUBLIC_TO_EVERYONE";
+  if (raw === "PRIVATE") return "SELF_ONLY";
+  return (TIKTOK_PRIVACY_LEVELS as readonly string[]).includes(raw)
+    ? (raw as TikTokPrivacy)
+    : null;
+}
+
 export interface TikTokOptions {
   // Null only while a request is being validated: TikTok's rules require the
   // creator to pick, so a stored post always has a real value.
-  privacy: "public" | "private" | null;
+  privacy: TikTokPrivacy | null;
   allowComment: boolean;
   allowDuet: boolean;
   allowStitch: boolean;
   // "Your brand" = promoting yourself; "branded content" = a paid partnership.
-  // TikTok treats the second as advertising, which is why it can't be private.
+  // TikTok treats the second as advertising, which is why it can only go out to
+  // everyone or to friends — never to followers only, and never privately.
   discloseYourBrand: boolean;
   discloseBrandedContent: boolean;
   isAiGenerated: boolean;

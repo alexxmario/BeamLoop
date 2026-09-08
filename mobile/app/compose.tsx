@@ -1,5 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
 import * as VideoThumbnails from "expo-video-thumbnails";
+import * as WebBrowser from "expo-web-browser";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -44,6 +45,8 @@ import { ApiError } from "../src/api/client";
 import {
   DEFAULT_TIKTOK_OPTIONS,
   PLATFORM_LABELS,
+  TIKTOK_BRANDED_CONTENT_AUDIENCES,
+  TIKTOK_PRIVACY_LABELS,
   isComingSoon,
   type BillingStatus,
   type Connection,
@@ -157,6 +160,8 @@ function buildPreflightChecks(input: {
   overrides: Partial<Record<Platform, string>>;
   placements: Partial<Record<Platform, PostPlacement>>;
   tiktok: TikTokOptions;
+  tiktokCreator: TikTokCreatorInfo | null;
+  tiktokCreatorError: string | null;
   scheduledAt: string | null;
   launchDrop: boolean;
 }): PreflightCheck[] {
@@ -168,6 +173,8 @@ function buildPreflightChecks(input: {
     overrides,
     placements,
     tiktok,
+    tiktokCreator,
+    tiktokCreatorError,
     scheduledAt,
     launchDrop,
   } = input;
@@ -254,10 +261,36 @@ function buildPreflightChecks(input: {
   }
 
   if (selected.includes("tiktok")) {
+    const durationLimit = tiktokCreator?.maxVideoDurationSec;
+    const videoSeconds =
+      media?.kind === "video" && media.items[0]?.durationMs
+        ? media.items[0].durationMs / 1000
+        : undefined;
     // TikTok's Content Posting rules require the creator to have actively made
     // these choices before anything is sent, so an unmade choice blocks the
     // post rather than being quietly defaulted.
-    if (tiktok.privacy === null) {
+    if (tiktokCreatorError) {
+      // Whatever TikTok said — a daily cap, a restriction, an outage. Their
+      // rules require the attempt to stop here rather than fail at publish.
+      checks.push({ label: "TikTok", detail: tiktokCreatorError, level: "block" });
+    } else if (!tiktokCreator) {
+      checks.push({
+        label: "TikTok",
+        detail: "Checking what this account allows…",
+        level: "block",
+      });
+    } else if (
+      durationLimit !== undefined &&
+      videoSeconds !== undefined &&
+      videoSeconds > durationLimit
+    ) {
+      // TikTok caps clip length per account, and rejects anything longer.
+      checks.push({
+        label: "TikTok",
+        detail: `This account can post up to ${Math.floor(durationLimit / 60)} min ${durationLimit % 60} s — your video is longer`,
+        level: "block",
+      });
+    } else if (tiktok.privacy === null) {
       checks.push({
         label: "TikTok",
         detail: "Choose who can see this post",
@@ -274,14 +307,20 @@ function buildPreflightChecks(input: {
         level: "block",
       });
     } else {
+      // Say back the audience they chose, in their words, before it goes out.
+      const audience = TIKTOK_PRIVACY_LABELS.find((o) => o.value === tiktok.privacy);
       checks.push(
-        tiktok.privacy === "private"
+        tiktok.privacy === "SELF_ONLY"
           ? {
               label: "TikTok",
               detail: "Only you will see this post",
               level: "warn",
             }
-          : { label: "TikTok", detail: "Public to everyone", level: "pass" }
+          : {
+              label: "TikTok",
+              detail: `Visible to ${(audience?.label ?? "everyone").toLowerCase()}`,
+              level: "pass",
+            }
       );
     }
   }
@@ -396,6 +435,9 @@ export default function ComposeModal() {
   const [coverFrameOpen, setCoverFrameOpen] = useState(false);
   const [tiktok, setTiktok] = useState<TikTokOptions>(DEFAULT_TIKTOK_OPTIONS);
   const [tiktokCreator, setTiktokCreator] = useState<TikTokCreatorInfo | null>(null);
+  // Why TikTok can't take a post right now, in TikTok's own terms. Blocks
+  // transmit while set — see the creator_info effect below.
+  const [tiktokCreatorError, setTiktokCreatorError] = useState<string | null>(null);
   const [limits, setLimits] = useState<BillingStatus["entitlement"]["limits"] | null>(
     null
   );
@@ -618,20 +660,31 @@ export default function ComposeModal() {
   };
 
   // TikTok asks for the creator's current permissions each time the posting
-  // screen is shown, so this refetches on selection rather than caching. A
-  // failure is silent: the card falls back to offering both privacy levels and
-  // the server still enforces whatever TikTok accepts.
+  // screen is shown, so this refetches on selection rather than caching.
+  //
+  // A failure is not silent. This is the call that tells us the creator has hit
+  // their daily posting limit or had posting restricted, and TikTok's rules say
+  // the attempt must stop and say why rather than carry on to a refusal at
+  // publish time — so the reason is kept and blocks transmit.
   useEffect(() => {
     if (!selected.has("tiktok")) {
       setTiktokCreator(null);
+      setTiktokCreatorError(null);
       return;
     }
     let active = true;
+    setTiktokCreatorError(null);
     fetchTikTokCreatorInfo()
       .then((info) => {
         if (active) setTiktokCreator(info);
       })
-      .catch(() => {});
+      .catch((e) => {
+        if (!active) return;
+        setTiktokCreator(null);
+        setTiktokCreatorError(
+          e instanceof Error ? e.message : "TikTok didn't answer. Try again."
+        );
+      });
     return () => {
       active = false;
     };
@@ -724,6 +777,8 @@ export default function ComposeModal() {
     overrides,
     placements,
     tiktok,
+    tiktokCreator,
+    tiktokCreatorError,
     scheduledAt,
     launchDrop,
   });
@@ -1826,11 +1881,20 @@ function TikTokOptionsCard({
     "your TikTok account";
   const avatar = creator?.creator.avatarUrl || account?.details?.social_images;
 
-  // Only offer what this account is actually allowed to post. Until TikTok
-  // answers we offer both, and the server clamps whatever is chosen.
-  const allowsPublic =
-    !creator || creator.privacyOptions.some((o) => o.startsWith("PUBLIC"));
-  const allowsPrivate = !creator || creator.privacyOptions.includes("SELF_ONLY");
+  // TikTok requires the options shown here to be exactly the ones creator_info
+  // returned — not a superset we then clamp. Until it answers, the card shows
+  // no options at all rather than guessing on the creator's behalf.
+  const privacyChoices = creator
+    ? TIKTOK_PRIVACY_LABELS.filter((o) => creator.privacyOptions.includes(o.value))
+    : [];
+
+  // Advertising can't be aimed at fewer people than it targets, so a paid
+  // partnership and a narrow audience rule each other out. TikTok expects that
+  // to be visible from both sides: the audiences grey out while the disclosure
+  // is on, and the disclosure greys out while a narrow audience is chosen.
+  const brandedContentBlocked =
+    value.privacy !== null &&
+    !TIKTOK_BRANDED_CONTENT_AUDIENCES.includes(value.privacy);
 
   return (
     <View
@@ -1882,66 +1946,65 @@ function TikTokOptionsCard({
 
       <View style={{ gap: spacing.sm }}>
         <Text style={s.sectionLabel}>Who can see this</Text>
-        <View style={[s.row, { gap: spacing.sm }]}>
-          {(
-            [
-              { value: "public" as const, label: "Everyone", detail: "Public" },
-              { value: "private" as const, label: "Only me", detail: "Private" },
-            ]
-          ).map((option) => {
-            // A paid partnership is advertising, and advertising can't be
-            // hidden — TikTok requires "only me" to be unavailable here.
-            const unavailable =
-              option.value === "public" ? !allowsPublic : !allowsPrivate;
-            const blocked =
-              unavailable ||
-              (option.value === "private" && value.discloseBrandedContent);
-            const active = value.privacy === option.value;
-            return (
-              <Pressable
-                key={option.value}
-                disabled={blocked}
-                onPress={() => set({ privacy: option.value })}
-                style={{
-                  flex: 1,
-                  paddingVertical: 10,
-                  alignItems: "center",
-                  borderRadius: radius.tile,
-                  backgroundColor: active ? platformHue.tiktok : palette.sheet,
-                  borderWidth: 1,
-                  borderColor: active ? platformHue.tiktok : palette.borderStrong,
-                  opacity: blocked ? 0.38 : 1,
-                }}
-              >
-                <Text
-                  style={{
-                    ...type.buttonSm,
-                    color: active ? palette.console : palette.text,
-                  }}
+        {privacyChoices.length === 0 ? (
+          <Text style={{ ...type.monoMeta, color: palette.textLabel }}>
+            ASKING TIKTOK WHAT THIS ACCOUNT ALLOWS…
+          </Text>
+        ) : (
+          <View style={{ gap: spacing.sm }}>
+            {privacyChoices.map((option) => {
+              // A paid partnership is advertising, and advertising can't be
+              // shown to fewer people than it targets — TikTok allows branded
+              // content out to everyone or to friends, and nowhere else.
+              const blocked =
+                value.discloseBrandedContent &&
+                !TIKTOK_BRANDED_CONTENT_AUDIENCES.includes(option.value);
+              const active = value.privacy === option.value;
+              return (
+                <Pressable
+                  key={option.value}
+                  disabled={blocked}
+                  onPress={() => set({ privacy: option.value })}
+                  style={[
+                    s.row,
+                    {
+                      justifyContent: "space-between",
+                      paddingVertical: 10,
+                      paddingHorizontal: spacing.md,
+                      borderRadius: radius.tile,
+                      backgroundColor: active ? platformHue.tiktok : palette.sheet,
+                      borderWidth: 1,
+                      borderColor: active
+                        ? platformHue.tiktok
+                        : palette.borderStrong,
+                      opacity: blocked ? 0.38 : 1,
+                    },
+                  ]}
                 >
-                  {option.label}
-                </Text>
-                <Text
-                  style={{
-                    ...type.monoMeta,
-                    color: active ? palette.console : palette.textLabel,
-                    marginTop: 2,
-                  }}
-                >
-                  {option.detail}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        {value.privacy === null && (
+                  <Text
+                    style={{
+                      ...type.buttonSm,
+                      color: active ? palette.console : palette.text,
+                    }}
+                  >
+                    {option.label}
+                  </Text>
+                  <Text
+                    style={{
+                      ...type.monoMeta,
+                      color: active ? palette.console : palette.textLabel,
+                    }}
+                  >
+                    {blocked ? "NOT FOR PAID PARTNERSHIPS" : option.detail}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+        {value.privacy === null && privacyChoices.length > 0 && (
           <Text style={{ ...type.monoMeta, color: palette.warning }}>
             REQUIRED — TIKTOK NEEDS YOU TO CHOOSE
-          </Text>
-        )}
-        {value.discloseBrandedContent && (
-          <Text style={{ ...type.monoMeta, color: palette.textLabel }}>
-            Paid partnerships have to be public on TikTok.
           </Text>
         )}
       </View>
@@ -2006,26 +2069,31 @@ function TikTokOptionsCard({
             />
             <OptionToggle
               label="Branded content"
-              detail="A third party paid you for this post"
-              value={value.discloseBrandedContent}
-              onChange={(next) =>
-                set({
-                  discloseBrandedContent: next,
-                  // Declaring a paid partnership makes the post public rather
-                  // than failing at TikTok with an error nobody can act on.
-                  ...(next && value.privacy === "private"
-                    ? { privacy: "public" as const }
-                    : {}),
-                })
+              detail={
+                brandedContentBlocked
+                  ? "Not available for this audience"
+                  : "A third party paid you for this post"
               }
+              disabled={brandedContentBlocked}
+              value={value.discloseBrandedContent}
+              onChange={(next) => set({ discloseBrandedContent: next })}
             />
             {/* TikTok specifies this wording, and which label gets applied. */}
-            <Text style={{ ...type.monoMeta, color: palette.textLabel }}>
+            <Text
+              style={{
+                ...type.monoMeta,
+                color:
+                  value.discloseYourBrand || value.discloseBrandedContent
+                    ? palette.textLabel
+                    : palette.warning,
+              }}
+            >
+              {/* A paid partnership outranks self-promotion when both apply. */}
               {value.discloseBrandedContent
-                ? "Your post will be labeled “Paid partnership”."
+                ? "Your video will be labeled “Paid partnership”."
                 : value.discloseYourBrand
-                  ? "Your post will be labeled “Promotional content”."
-                  : "PICK AT LEAST ONE TO PUBLISH"}
+                  ? "Your video will be labeled “Promotional content”."
+                  : "You need to indicate if your content promotes yourself, a third party, or both."}
             </Text>
           </View>
         )}
@@ -2038,15 +2106,51 @@ function TikTokOptionsCard({
         />
       </View>
 
-      {(value.discloseYourBrand || value.discloseBrandedContent) && (
-        <Text style={{ ...type.monoMeta, color: palette.textLabel }}>
-          {value.discloseBrandedContent
-            ? "By posting, you agree to TikTok's Branded Content Policy and Music Usage Confirmation."
-            : "By posting, you agree to TikTok's Music Usage Confirmation."}
+      {/* TikTok requires this declaration on the posting screen at all times,
+          and requires it to name the Branded Content Policy as well once a paid
+          partnership is declared. Both policies are linked, not just named. */}
+      <Text style={{ ...type.monoMeta, color: palette.textLabel }}>
+        By posting, you agree to TikTok's{" "}
+        {value.discloseBrandedContent && (
+          <>
+            <Text
+              style={{ color: platformHue.tiktok, textDecorationLine: "underline" }}
+              onPress={() => openTikTokPolicy(BRANDED_CONTENT_POLICY_URL)}
+            >
+              Branded Content Policy
+            </Text>
+            {" and "}
+          </>
+        )}
+        <Text
+          style={{ color: platformHue.tiktok, textDecorationLine: "underline" }}
+          onPress={() => openTikTokPolicy(MUSIC_USAGE_CONFIRMATION_URL)}
+        >
+          Music Usage Confirmation
         </Text>
-      )}
+        .
+      </Text>
+
+      {/* TikTok asks that creators be told publishing isn't instant, so nobody
+          reads the gap before the video appears as a failure. */}
+      <Text style={{ ...type.monoMeta, color: palette.textLabel }}>
+        After you transmit, TikTok may take a few minutes to process the video
+        before it shows on your profile.
+      </Text>
     </View>
   );
+}
+
+// TikTok's own policy pages, linked from the declaration above because the
+// guidelines require the creator to be able to read what they're agreeing to.
+const MUSIC_USAGE_CONFIRMATION_URL =
+  "https://www.tiktok.com/legal/page/global/music-usage-confirmation/en";
+const BRANDED_CONTENT_POLICY_URL =
+  "https://www.tiktok.com/legal/page/global/bc-policy/en";
+
+function openTikTokPolicy(url: string) {
+  // Opened in the in-app browser so the creator keeps their draft.
+  WebBrowser.openBrowserAsync(url).catch(() => {});
 }
 
 /**

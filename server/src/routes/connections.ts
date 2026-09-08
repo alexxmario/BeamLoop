@@ -9,7 +9,7 @@ import {
   type Platform,
 } from "../lib/platforms.js";
 import { subscriptionStore } from "../lib/plans.js";
-import { isTikTokConfigured, tiktok } from "../lib/tiktok.js";
+import { describeTikTokError, isTikTokConfigured, tiktok } from "../lib/tiktok.js";
 import { accessTokenForUser, tiktokAccountStore } from "../lib/tiktokAccounts.js";
 import { signTikTokState } from "./tiktokAuth.js";
 
@@ -220,8 +220,12 @@ export default async function connectionRoutes(app: FastifyInstance) {
       };
     } catch (err) {
       req.log.warn({ err, userId: req.user.id }, "TikTok creator info lookup failed");
+      // TikTok answers this endpoint with the reason a creator can't post right
+      // now — a daily cap, a posting restriction — and their rules require the
+      // posting screen to stop and say so rather than let the attempt continue.
       return reply.code(502).send({
-        error: "BeamLoop couldn't reach TikTok just now. Try again in a moment.",
+        error: describeTikTokError(err),
+        code: "TIKTOK_CREATOR_INFO",
       });
     }
   });

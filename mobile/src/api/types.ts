@@ -58,11 +58,43 @@ export type PostPlacement = "timeline" | "reels" | "stories";
  * these choices with the person posting rather than with the app, so they are
  * part of the composer and travel with each post.
  */
+/**
+ * TikTok's privacy levels, spelled the way TikTok spells them.
+ *
+ * The composer offers exactly the ones `creator_info` returns for the connected
+ * account, which is why this can't be a simplified public/private pair — most
+ * accounts can also post to friends, and some can only post to followers.
+ */
+export type TikTokPrivacy =
+  | "PUBLIC_TO_EVERYONE"
+  | "MUTUAL_FOLLOW_FRIENDS"
+  | "FOLLOWER_OF_CREATOR"
+  | "SELF_ONLY";
+
+/** How each level reads to a creator, in the order TikTok's own composer uses. */
+export const TIKTOK_PRIVACY_LABELS: ReadonlyArray<{
+  value: TikTokPrivacy;
+  label: string;
+  detail: string;
+}> = [
+  { value: "PUBLIC_TO_EVERYONE", label: "Everyone", detail: "Public" },
+  { value: "MUTUAL_FOLLOW_FRIENDS", label: "Friends", detail: "Mutual follows" },
+  { value: "FOLLOWER_OF_CREATOR", label: "Followers", detail: "People who follow you" },
+  { value: "SELF_ONLY", label: "Only me", detail: "Private" },
+];
+
+// A paid partnership is advertising, and TikTok won't let advertising go out to
+// a narrower audience than everyone or the creator's friends.
+export const TIKTOK_BRANDED_CONTENT_AUDIENCES: readonly TikTokPrivacy[] = [
+  "PUBLIC_TO_EVERYONE",
+  "MUTUAL_FOLLOW_FRIENDS",
+];
+
 export interface TikTokOptions {
   // null until the creator picks one. TikTok's Content Posting audit requires
   // the privacy selector to have NO default — the creator must choose, and a
   // post can't be sent until they have.
-  privacy: "public" | "private" | null;
+  privacy: TikTokPrivacy | null;
   allowComment: boolean;
   allowDuet: boolean;
   allowStitch: boolean;
@@ -84,7 +116,7 @@ export interface TikTokOptions {
  */
 export interface TikTokCreatorInfo {
   creator: { username: string; nickname: string; avatarUrl: string };
-  privacyOptions: string[];
+  privacyOptions: TikTokPrivacy[];
   commentDisabled: boolean;
   duetDisabled: boolean;
   stitchDisabled: boolean;

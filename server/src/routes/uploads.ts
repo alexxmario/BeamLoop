@@ -6,11 +6,13 @@ import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { z } from "zod";
 import {
+  parseTikTokPrivacy,
   postStore,
   type MediaFile,
   type PostRecord,
   type StoredMedia,
   type TikTokOptions,
+  type TikTokPrivacy,
 } from "../lib/posts.js";
 import {
   formatResetDate,
@@ -137,16 +139,11 @@ function parseTikTokOptions(fields: Record<string, string[]>): TikTokOptions {
     const value = fields[name]?.[0];
     return value === undefined ? fallback : value === "true";
   };
-  const requested = fields.tiktok_privacy?.[0];
-  const chosen = requested === "public" || requested === "private" ? requested : null;
+  const chosen = parseTikTokPrivacy(fields.tiktok_privacy?.[0]);
   return {
     // A null here means the creator never chose, which validation rejects.
     privacy:
-      chosen === null
-        ? null
-        : config.TIKTOK_PRIVACY === "private"
-          ? "private"
-          : chosen,
+      chosen === null ? null : config.TIKTOK_PRIVACY === "private" ? "SELF_ONLY" : chosen,
     allowComment: flag("tiktok_allow_comment", false),
     allowDuet: flag("tiktok_allow_duet", false),
     allowStitch: flag("tiktok_allow_stitch", false),
@@ -156,16 +153,25 @@ function parseTikTokOptions(fields: Record<string, string[]>): TikTokOptions {
   };
 }
 
-// TikTok treats a paid partnership as advertising, and advertising cannot be
-// hidden — the platform rejects branded content on a private post.
+// TikTok treats a paid partnership as advertising, and advertising can't be
+// shown to a narrower audience than the people it is aimed at: branded content
+// is allowed out to everyone or to friends, and nowhere else.
+const BRANDED_CONTENT_AUDIENCES = new Set<TikTokPrivacy>([
+  "PUBLIC_TO_EVERYONE",
+  "MUTUAL_FOLLOW_FRIENDS",
+]);
+
 function validateTikTokOptions(options: TikTokOptions): string | undefined {
   // TikTok's Content Posting rules give this choice to the creator and forbid a
   // pre-selected default, so there is nothing sensible to fall back to.
   if (options.privacy === null) {
     return "Choose who can see your TikTok post before publishing.";
   }
-  if (options.discloseBrandedContent && options.privacy === "private") {
-    return "TikTok branded content has to be visible to everyone. Make the post public or turn off the paid-partnership disclosure.";
+  if (
+    options.discloseBrandedContent &&
+    !BRANDED_CONTENT_AUDIENCES.has(options.privacy)
+  ) {
+    return "TikTok branded content has to reach everyone or your friends. Widen who can see the post, or turn off the paid-partnership disclosure.";
   }
   return undefined;
 }
@@ -374,13 +380,8 @@ async function publishToTikTok(input: {
   // Validation guarantees a chosen privacy on any post carrying options; the
   // fallback covers a post stored before these controls existed.
   const privacy =
-    options?.privacy === "private"
-      ? "SELF_ONLY"
-      : options?.privacy === "public"
-        ? "PUBLIC_TO_EVERYONE"
-        : config.TIKTOK_PRIVACY === "private"
-          ? "SELF_ONLY"
-          : "PUBLIC_TO_EVERYONE";
+    parseTikTokPrivacy(options?.privacy) ??
+    (config.TIKTOK_PRIVACY === "private" ? "SELF_ONLY" : "PUBLIC_TO_EVERYONE");
 
   try {
     const { size } = await fsp.stat(file.path);
@@ -509,25 +510,6 @@ async function publish(opts: {
         if (overrides[p]) cfg.caption = overrides[p];
         if ((p === "instagram" || p === "facebook") && placements?.[p]) {
           cfg.placement = placements[p];
-        }
-        // TikTok requires a privacy level on every post. The rest is what the
-        // creator chose in the composer; older clients send nothing and fall
-        // back to the platform defaults.
-        if (p === "tiktok") {
-          cfg.privacy_status = tiktokOptions?.privacy ?? config.TIKTOK_PRIVACY;
-          // Validation guarantees a chosen privacy for any post carrying
-          // options; this only covers the no-options path.
-          if (tiktokOptions) {
-            cfg.allow_comment = tiktokOptions.allowComment;
-            cfg.disclose_your_brand = tiktokOptions.discloseYourBrand;
-            cfg.disclose_branded_content = tiktokOptions.discloseBrandedContent;
-            cfg.is_ai_generated = tiktokOptions.isAiGenerated;
-            // Duet and stitch are video-only concepts on TikTok.
-            if (kind === "video") {
-              cfg.allow_duet = tiktokOptions.allowDuet;
-              cfg.allow_stitch = tiktokOptions.allowStitch;
-            }
-          }
         }
         if (Object.keys(cfg).length > 0) platformConfigurations[p] = cfg;
       }
