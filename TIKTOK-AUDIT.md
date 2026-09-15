@@ -3,9 +3,15 @@
 BeamLoop publishes to TikTok directly — its own API client, its own OAuth
 consent screen — while Post for Me handles every other platform.
 
-**Status: the Direct Post audit was rejected once and is being resubmitted.**
-Until it passes, every post is forced `SELF_ONLY`, the creator's TikTok account
-must itself be private, and only five accounts may post per 24 hours.
+**Status: approved for Direct Post, 15 September 2026** — on the second
+submission, after a rejection against points 1–5 of the UX guidelines. Posts now
+publish at the visibility the creator chooses, creator accounts no longer have to
+be private, and the daily publishing cap is the 500 users we applied for rather
+than the unaudited 5.
+
+The approval history is at the bottom; it is worth reading before touching the
+posting screen, because most of what looks like an odd design choice there is a
+guideline requirement.
 
 ## How it works
 
@@ -31,7 +37,7 @@ must itself be private, and only five accounts may post per 24 hours.
 | `TIKTOK_CLIENT_KEY` | Production key from the app's Credentials panel. An `sb` prefix means the **sandbox** key, which only authorizes accounts registered as sandbox target users. |
 | `TIKTOK_CLIENT_SECRET` | Its matching secret. |
 | `TIKTOK_REDIRECT_URL` | `<PUBLIC_BASE_URL>/connections/tiktok/callback`, registered on the TikTok app **exactly**. Sandbox and production settings are separate. |
-| `TIKTOK_PRIVACY` | `private` while unaudited. It is a ceiling, not a default: while set to `private` every post is forced `SELF_ONLY` regardless of what the creator chose. **Delete it the day the audit passes.** |
+| `TIKTOK_PRIVACY` | **Must stay unset.** It is a ceiling, not a default: while set to `private` every post is forced `SELF_ONLY` regardless of what the creator chose. It was needed only while unaudited, and was removed on approval. |
 
 Without a key and secret the channel reports itself unavailable rather than
 failing at publish time.
@@ -42,8 +48,8 @@ failing at publish time.
 | --- | --- |
 | `non_sandbox_target` at TikTok's login | A sandbox key is configured, and this account isn't a registered target user. |
 | Posts succeed but nobody can see them | `TIKTOK_PRIVACY` is still set. |
-| "Please review our integration guidelines" | Unaudited-client rule: the creator's TikTok *account* must be private. |
-| `reached_active_user_cap` | Unaudited-client cap of 5 posting users per 24 hours. |
+| "Please review our integration guidelines" | Unaudited-client rule: the creator's TikTok *account* must be private. Should not occur now that we are audited — if it does, check the client key is the audited one. |
+| `reached_active_user_cap` | The daily publishing-user cap. 5 while unaudited; 500 since approval. Request an increase from TikTok with real usage figures. |
 | Everyone suddenly disconnected | `APP_JWT_SECRET` changed. Stored tokens are encrypted with a key derived from it, so rotating it forces every creator to reconnect. |
 
 ---
@@ -164,15 +170,22 @@ isn't itself private, and the error is a bare link to the guidelines. Switch the
 demo account to Private in TikTok's settings (Settings and privacy → Privacy).
 It can go back to public after approval.
 
-### After approval
+### On approval — done 15 September 2026
 
-1. Delete `TIKTOK_PRIVACY` from Railway, or every post stays private.
-2. Replace `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` with the production pair
-   from the Credentials panel. A sandbox key (`sb` prefix, e.g.
-   `sbawjb1yepj52rbxzs`) only works for accounts added as sandbox target users,
-   so leaving it in place keeps TikTok limited to those ten accounts. Register
-   the same redirect URI on the production app.
-3. Update the status line at the top of this file.
+1. `TIKTOK_PRIVACY` deleted from Railway. While it was set, every post was
+   forced `SELF_ONLY` no matter what the creator picked; leaving it in place
+   would have made approval invisible to users.
+2. No credential swap was needed — Railway already held the **production**
+   key (no `sb` prefix). Only relevant if that ever changes: a sandbox key
+   (`sb` prefix, e.g. `sbawjb1yepj52rbxzs`) works solely for accounts added as
+   sandbox target users.
+3. The demo TikTok account can go back to public; the private-account rule
+   applied only to unaudited clients.
+4. **Ship a build carrying the compliant posting screen.** The audit was granted
+   against the UX in the demo video, which landed in v1.2.0 — anything older
+   shows creators a screen TikTok has not approved. Older clients still publish
+   correctly (`parseTikTokPrivacy` accepts the old `public`/`private` spelling),
+   so this is a compliance obligation rather than a functional break.
 
 ## Where the code lives
 
